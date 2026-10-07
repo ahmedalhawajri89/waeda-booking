@@ -32,7 +32,7 @@ const ALIGN = {
       v-if="eyebrow"
       v-reveal
       class="mb-3 text-[13px] font-bold tracking-wide"
-      :class="tone === 'inverse' ? 'text-accent-300' : 'text-primary-600'"
+      :class="tone === 'inverse' ? 'text-accent-300' : 'text-primary-fg'"
     >
       {{ eyebrow }}
     </p>

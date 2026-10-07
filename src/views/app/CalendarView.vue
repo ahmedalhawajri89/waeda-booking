@@ -1,21 +1,26 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { addDays, isSameDay, startOfDay, startOfWeek } from 'date-fns'
-import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import { addDays, format, isSameDay, parseISO, startOfDay, startOfWeek } from 'date-fns'
+import { ChevronLeft, ChevronRight, Rows3, Rows4 } from 'lucide-vue-next'
 import { useBookingsStore } from '@/stores/bookings'
-import { fullDate, relativeDay } from '@/lib/format'
-import { businessHours } from '@/data/catalog'
+import { fullDate, relativeDay, time } from '@/lib/format'
+import { businessHours, resources } from '@/data/catalog'
+import { useBookingMove } from '@/composables/useBookingMove'
 import { isOpenOn } from '@/lib/availability'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseTabs from '@/components/ui/BaseTabs.vue'
 import ErrorState from '@/components/ui/ErrorState.vue'
 import IconButton from '@/components/ui/IconButton.vue'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
-import DayTimeline from '@/components/booking/DayTimeline.vue'
+import ResourceDay from '@/components/booking/ResourceDay.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
+import { CalendarX2 } from 'lucide-vue-next'
 import WeekGrid from '@/components/booking/WeekGrid.vue'
 
-const emit = defineEmits(['openBooking'])
+const emit = defineEmits(['openBooking', 'createAt'])
+const { move } = useBookingMove()
+const team = computed(() => resources.filter((r) => r.isActive))
 const store = useBookingsStore()
 const route = useRoute()
 const router = useRouter()
@@ -27,10 +32,33 @@ const MODES = [
 ]
 
 const mode = ref(route.query.view ?? 'day')
-const cursor = ref(startOfDay(new Date()))
+const cursor = ref(
+  typeof route.query.date === 'string'
+    ? startOfDay(parseISO(route.query.date))
+    : startOfDay(new Date()),
+)
 
-// Kept in the URL so a particular view is linkable and survives a refresh.
-watch(mode, (v) => router.replace({ query: { ...route.query, view: v } }))
+// The view and the day are kept in the URL, so a particular day is linkable
+// and survives a refresh.
+watch([mode, cursor], ([v, d]) =>
+  router.replace({ query: { ...route.query, view: v, date: format(d, 'yyyy-MM-dd') } }),
+)
+
+/** Roomy or compact rows; remembered per device. */
+const DENSITY_KEY = 'bookingpro:calendar-density:v1'
+const compact = ref(false)
+try {
+  compact.value = localStorage.getItem(DENSITY_KEY) === 'compact'
+} catch {
+  /* roomy */
+}
+watch(compact, (c) => {
+  try {
+    localStorage.setItem(DENSITY_KEY, c ? 'compact' : 'roomy')
+  } catch {
+    /* session only */
+  }
+})
 
 // Sunday-start weeks: the working week starts on Sunday in the region this
 // is built for, and date-fns defaults to Monday.
@@ -73,7 +101,7 @@ function openDay(date) {
 </script>
 
 <template>
-  <div class="mx-auto max-w-6xl p-4 lg:p-6">
+  <div class="w-full p-4 lg:p-6 2xl:px-8">
     <header class="mb-4 flex flex-wrap items-center justify-between gap-3">
       <div class="flex items-center gap-2">
         <!-- RTL: "previous" points right -->
@@ -106,15 +134,33 @@ function openDay(date) {
         >
           اليوم
         </BaseButton>
+        <IconButton
+          v-if="mode === 'day'"
+          :icon="compact ? Rows3 : Rows4"
+          :label="compact ? 'عرض مريح' : 'عرض مضغوط'"
+          @click="compact = !compact"
+        />
         <BaseTabs v-model="mode" :items="MODES" label="عرض التقويم" size="sm" />
       </div>
     </header>
 
     <ErrorState v-if="store.error" :message="store.error" @retry="store.load(true)" />
 
-    <div v-else-if="mode === 'day'" class="surface p-4">
-      <DayTimeline :date="cursor" :bookings="dayBookings" @open="emit('openBooking', $event)" />
-    </div>
+    <template v-else-if="mode === 'day'">
+      <p class="text-fg-subtle mb-2 hidden text-xs sm:block">
+        انقر وقتاً فارغاً لحجز جديد، واسحب الحجز لتغيير وقته أو الشخص.
+      </p>
+      <div class="surface overflow-hidden">
+        <ResourceDay
+          :date="cursor"
+          :resources="team"
+          :scale="compact ? 0.9 : 1.4"
+          @open="emit('openBooking', $event)"
+          @create="emit('createAt', $event)"
+          @move="move"
+        />
+      </div>
+    </template>
 
     <div v-else-if="mode === 'week'" class="surface p-4">
       <WeekGrid
@@ -132,16 +178,11 @@ function openDay(date) {
           <li v-for="b in group.items" :key="b.id">
             <button
               type="button"
-              class="hover:bg-primary-50/40 flex w-full items-center gap-3 px-4 py-3 text-start"
+              class="hover:bg-primary-soft/40 flex w-full items-center gap-3 px-4 py-3 text-start"
               @click="emit('openBooking', b.id)"
             >
               <time :datetime="b.startAt" class="text-fg w-16 shrink-0 text-sm font-bold">
-                {{
-                  new Date(b.startAt).toLocaleTimeString('ar-SA', {
-                    hour: 'numeric',
-                    minute: '2-digit',
-                  })
-                }}
+                {{ time(b.startAt) }}
               </time>
               <span class="min-w-0 flex-1">
                 <span class="text-fg block truncate text-sm">
@@ -157,9 +198,13 @@ function openDay(date) {
         </ul>
       </section>
 
-      <p v-if="agenda.length === 0" class="surface text-fg-subtle px-4 py-10 text-center text-sm">
-        لا حجوزات في الأسبوعين القادمين.
-      </p>
+      <div v-if="agenda.length === 0" class="surface">
+        <EmptyState
+          :icon="CalendarX2"
+          title="لا حجوزات في الأسبوعين القادمين"
+          description="شارك رابط صفحة الحجز مع عملائك لتبدأ الحجوزات بالوصول."
+        />
+      </div>
     </div>
   </div>
 </template>

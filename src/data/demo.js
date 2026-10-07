@@ -25,7 +25,7 @@ import { BadgeCheck, CalendarCheck, MousePointerClick } from 'lucide-vue-next'
 /** Hero artifact: a clinic day. */
 export const heroDay = {
   title: 'عيادة النخيل',
-  room: 'غرفة ١',
+  room: 'غرفة 1',
   openMin: 9 * 60,
   closeMin: 18 * 60,
   blocks: [

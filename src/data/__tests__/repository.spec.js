@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * The demo backend's conflict rule.
@@ -54,6 +54,12 @@ const CLASHING = [
 let repository
 let isConflict
 
+// The repository pulls in the risk model and the guard engine; transforming
+// them cold under a parallel run can outlast one test's timeout. Pay it once.
+beforeAll(async () => {
+  await import('../repository')
+}, 60_000)
+
 beforeEach(async () => {
   store.clear()
   vi.resetModules()
@@ -64,69 +70,103 @@ beforeEach(async () => {
 })
 
 describe('the local repository refuses to introduce an overlap', () => {
-  it('rejects a write that creates a conflict', async () => {
-    store.set(KEY, JSON.stringify([booking({ id: 'a' })]))
+  it('rejects a new booking that creates a conflict', async () => {
+    store.set(KEY, JSON.stringify([CLASHING[0]]))
 
-    await expect(repository.saveBookings(CLASHING)).rejects.toSatisfy(isConflict)
+    await expect(repository.createBooking(CLASHING[1])).rejects.toSatisfy(isConflict)
   })
 
   it('leaves what was already stored untouched when it rejects', async () => {
-    const original = [booking({ id: 'a' })]
+    const original = [CLASHING[0]]
     store.set(KEY, JSON.stringify(original))
 
-    await repository.saveBookings(CLASHING).catch(() => {})
+    await repository.createBooking(CLASHING[1]).catch(() => {})
 
     expect(JSON.parse(store.get(KEY))).toEqual(original)
   })
 
-  it('accepts a conflict that was already there', async () => {
+  it('accepts a write beside a conflict that was already there', async () => {
     // The seed ships one deliberately, so the Today screen has something to
-    // put in its needs-attention queue. Rejecting the whole list because of it
-    // meant every save failed and nothing an operator did ever persisted.
+    // put in its needs-attention queue. Refusing every write because of it
+    // meant nothing an operator did ever persisted.
     store.set(KEY, JSON.stringify(CLASHING))
 
-    await expect(
-      repository.saveBookings([...CLASHING, booking({ id: 'c', resourceId: 'r2' })]),
-    ).resolves.toBeUndefined()
+    await repository.createBooking(booking({ id: 'c', resourceId: 'r2' }))
+    await repository.updateBooking({ ...CLASHING[0], paymentStatus: 'paid' })
 
     expect(JSON.parse(store.get(KEY))).toHaveLength(3)
   })
 
-  it('still rejects a second, new conflict added alongside an existing one', async () => {
-    store.set(KEY, JSON.stringify(CLASHING))
+  it('rejects moving a booking onto another', async () => {
+    store.set(
+      KEY,
+      JSON.stringify([
+        booking({ id: 'a' }),
+        booking({
+          id: 'b',
+          startAt: '2030-03-03T12:00:00.000Z',
+          endAt: '2030-03-03T12:40:00.000Z',
+        }),
+      ]),
+    )
 
-    const withAnother = [
-      ...CLASHING,
-      booking({ id: 'c', resourceId: 'r2' }),
-      booking({ id: 'd', resourceId: 'r2', startAt: '2030-03-03T10:10:00.000Z' }),
-    ]
-
-    await expect(repository.saveBookings(withAnother)).rejects.toSatisfy(isConflict)
+    await expect(
+      repository.updateBooking(
+        booking({
+          id: 'b',
+          startAt: '2030-03-03T10:20:00.000Z',
+          endAt: '2030-03-03T11:00:00.000Z',
+        }),
+      ),
+    ).rejects.toSatisfy(isConflict)
   })
 
   it('lets a cancelled booking release its slot', async () => {
     store.set(KEY, JSON.stringify([booking({ id: 'a' })]))
 
-    const released = [
-      booking({ id: 'a', status: 'cancelled' }),
-      booking({ id: 'b', startAt: '2030-03-03T10:20:00.000Z' }),
-    ]
-
-    await expect(repository.saveBookings(released)).resolves.toBeUndefined()
+    await repository.updateBooking(booking({ id: 'a', status: 'cancelled' }))
+    await expect(
+      repository.createBooking(booking({ id: 'b', startAt: '2030-03-03T10:20:00.000Z' })),
+    ).resolves.toMatchObject({ id: 'b' })
   })
 
   it('treats touching edges as free, matching overlaps()', async () => {
     store.set(KEY, JSON.stringify([booking({ id: 'a' })]))
 
-    const touching = [
-      booking({ id: 'a' }),
-      booking({
-        id: 'b',
-        startAt: '2030-03-03T10:40:00.000Z',
-        endAt: '2030-03-03T11:20:00.000Z',
-      }),
-    ]
+    await expect(
+      repository.createBooking(
+        booking({
+          id: 'b',
+          startAt: '2030-03-03T10:40:00.000Z',
+          endAt: '2030-03-03T11:20:00.000Z',
+        }),
+      ),
+    ).resolves.toMatchObject({ id: 'b' })
+  })
+})
 
-    await expect(repository.saveBookings(touching)).resolves.toBeUndefined()
+describe('creating a booking on the local repository', () => {
+  it('is idempotent: the same id twice stores one booking', async () => {
+    // Matches the API, where a retried create returns the first.
+    const first = await repository.createBooking(booking({ id: 'x' }))
+    const again = await repository.createBooking(booking({ id: 'x' }))
+
+    expect(again.reference).toBe(first.reference)
+    expect(JSON.parse(store.get(KEY))).toHaveLength(1)
+  })
+
+  it('issues the next reference after the highest one stored this year', async () => {
+    const year = new Date().getFullYear()
+    store.set(
+      KEY,
+      JSON.stringify([
+        booking({ id: 'a', reference: `BK-${year}-0641` }),
+        booking({ id: 'b', reference: `BK-${year - 1}-0900`, resourceId: 'r2' }),
+      ]),
+    )
+
+    const saved = await repository.createBooking(booking({ id: 'c', resourceId: 'r3' }))
+
+    expect(saved.reference).toBe(`BK-${year}-0642`)
   })
 })

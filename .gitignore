@@ -21,3 +21,6 @@ playwright-report/
 CLAUDE.md
 .DS_Store
 Thumbs.db
+
+# portfolio captures (npm run showcase)
+/showcase

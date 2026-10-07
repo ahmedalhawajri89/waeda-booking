@@ -6,7 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Customer;
 use App\Models\Organization;
-use App\Models\Service;
+use App\Models\Resource;
+use App\Services\BookingRules;
 use App\Services\BookingWriter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -27,7 +28,14 @@ use Illuminate\Support\Facades\DB;
  */
 class PublicBookingController extends Controller
 {
-    public function __construct(private BookingWriter $writer)
+    /**
+     * A guest may change or cancel their own booking until this long before it
+     * starts. Later than that the slot cannot be offered to anyone else in time,
+     * so the change goes through the business. Mirrors src/lib/bookingPolicy.js.
+     */
+    public const CHANGE_CUTOFF_MIN = 120;
+
+    public function __construct(private BookingWriter $writer, private BookingRules $rules)
     {
     }
 
@@ -43,35 +51,22 @@ class PublicBookingController extends Controller
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $org = Organization::query()->value('id');
+        $org = $this->publicOrgId($request);
 
         if (strlen(Customer::normalisePhone($data['phone'])) < 9) {
             return response()->json(['error' => 'invalid_phone'], 422);
         }
 
-        $service = Service::with('resources:id')
-            ->where('id', $data['serviceId'])
-            ->where('org_id', $org)
-            ->where('is_active', true)
-            ->first();
-
-        if (! $service) {
-            return response()->json(['error' => 'unknown_service'], 422);
-        }
-
-        if (! $service->resources->contains('id', $data['resourceId'])) {
-            return response()->json(['error' => 'resource_not_offered'], 422);
-        }
+        // Throws InvalidBooking (422 with the same error codes as before).
+        $service = $this->rules->service($org, $data['serviceId'], $data['resourceId']);
+        $this->rules->resourceIsActive($org, $data['resourceId']);
 
         $start = Carbon::parse($data['startAt']);
         if ($start->isPast()) {
             return response()->json(['error' => 'start_in_past'], 422);
         }
 
-        $end = $start->copy()->addMinutes($service->occupiedMinutes());
-        if (! $this->withinBusinessHours($org, $start, $end)) {
-            return response()->json(['error' => 'outside_business_hours'], 422);
-        }
+        $this->rules->withinHours($org, $start, $start->copy()->addMinutes($service->occupiedMinutes()));
 
         // BookingWriter opens its own transaction and takes the resource lock;
         // the customer has to exist before that, so it is written first and
@@ -118,6 +113,14 @@ class PublicBookingController extends Controller
             'from' => ['required', 'date'],
             'to' => ['required', 'date', 'after_or_equal:from'],
         ]);
+
+        // Only this organization's active resources: an arbitrary id used to
+        // answer with the busy times of any room in the database.
+        $resource = Resource::where('org_id', $this->publicOrgId($request))
+            ->where('is_active', true)->find($data['resourceId']);
+        if (! $resource) {
+            return response()->json([]);
+        }
 
         $from = Carbon::parse($data['from'])->startOfDay();
         // Capped so a caller cannot ask for a decade and make this a scan.
@@ -168,41 +171,6 @@ class PublicBookingController extends Controller
     }
 
     /**
-     * The same rule isOpenOn()/generateSlots() apply on the client, enforced
-     * where the client cannot be trusted.
-     *
-     * Weekday and wall-clock time are only meaningful in the organization's own
-     * zone, so the instants are converted before either is read.
-     */
-    private function withinBusinessHours(string $org, Carbon $start, Carbon $end): bool
-    {
-        $tz = Organization::query()->where('id', $org)->value('timezone');
-        if (! $tz) {
-            return false;
-        }
-
-        $localStart = $start->copy()->setTimezone($tz);
-        $localEnd = $end->copy()->setTimezone($tz);
-
-        // A booking that crosses midnight cannot sit inside one day's hours.
-        if (! $localStart->isSameDay($localEnd)) {
-            return false;
-        }
-
-        $hours = DB::table('business_hours')
-            ->where('org_id', $org)
-            ->where('weekday', (int) $localStart->format('w'))
-            ->first();
-
-        if (! $hours || $hours->is_closed) {
-            return false;
-        }
-
-        return $localStart->format('H:i:s') >= $hours->open_time
-            && $localEnd->format('H:i:s') <= $hours->close_time;
-    }
-
-    /**
      * Look up a booking by its reference.
      *
      * Two factors, always. BK-2026-0431 is sequential and trivially guessable,
@@ -213,7 +181,7 @@ class PublicBookingController extends Controller
     public function show(Request $request, string $reference)
     {
         $data = $request->validate(['phone' => ['required', 'string', 'max:64']]);
-        $booking = $this->findByReferenceAndPhone($reference, $data['phone']);
+        $booking = $this->findByReferenceAndPhone($request, $reference, $data['phone']);
 
         if (! $booking) {
             return response()->json(['error' => 'not_found'], 404);
@@ -228,6 +196,12 @@ class PublicBookingController extends Controller
             'priceMinor' => $booking->price_minor,
             'serviceName' => $booking->service->name,
             'customerName' => $booking->customer->name,
+            // What the manage page needs to offer other times for the same
+            // service with the same person. Ids only; nothing about anyone else.
+            'serviceId' => $booking->service_id,
+            'resourceId' => $booking->resource_id,
+            'resourceName' => $booking->resource?->name,
+            'durationMin' => $booking->service->duration_min,
         ]);
     }
 
@@ -235,9 +209,9 @@ class PublicBookingController extends Controller
     public function cancel(Request $request, string $reference)
     {
         $data = $request->validate(['phone' => ['required', 'string', 'max:64']]);
-        $booking = $this->findByReferenceAndPhone($reference, $data['phone']);
+        $booking = $this->findByReferenceAndPhone($request, $reference, $data['phone']);
 
-        if (! $booking || ! in_array($booking->status, Booking::BLOCKING, true)) {
+        if (! $booking || ! $this->changeable($booking)) {
             return response()->json(['error' => 'not_cancellable'], 404);
         }
 
@@ -246,14 +220,63 @@ class PublicBookingController extends Controller
         return response()->json(['cancelled' => true]);
     }
 
-    private function findByReferenceAndPhone(string $reference, string $phone): ?Booking
+    /**
+     * Move your own booking to another free time, same service, same person.
+     *
+     * The writer recomputes the end from the service, takes the resource lock
+     * and refuses an overlap (409), so the guest supplies only the new start.
+     * A guest moving their appointment is the alternative to a no-show, which
+     * is why this exists at all.
+     */
+    public function reschedule(Request $request, string $reference)
+    {
+        $data = $request->validate([
+            'phone' => ['required', 'string', 'max:64'],
+            'startAt' => ['required', 'date'],
+        ]);
+        $booking = $this->findByReferenceAndPhone($request, $reference, $data['phone']);
+
+        if (! $booking || ! $this->changeable($booking)) {
+            return response()->json(['error' => 'not_changeable'], 404);
+        }
+
+        $start = Carbon::parse($data['startAt'])->utc();
+        if ($start->lessThanOrEqualTo(now()->addMinutes(self::CHANGE_CUTOFF_MIN))) {
+            return response()->json(['error' => 'start_too_soon'], 422);
+        }
+        $this->rules->withinHours(
+            $booking->org_id,
+            $start,
+            $start->copy()->addMinutes($booking->service->occupiedMinutes()),
+        );
+
+        $booking = $this->writer->update($booking, ['start_at' => $start]);
+
+        return response()->json([
+            'reference' => $booking->reference,
+            'startAt' => $booking->start_at->toIso8601String(),
+            'endAt' => $booking->end_at->toIso8601String(),
+            'status' => $booking->status,
+        ]);
+    }
+
+    /** Still open, and far enough ahead that the slot can go to someone else. */
+    private function changeable(Booking $booking): bool
+    {
+        return in_array($booking->status, ['pending', 'confirmed'], true)
+            && $booking->start_at->greaterThan(now()->addMinutes(self::CHANGE_CUTOFF_MIN));
+    }
+
+    private function findByReferenceAndPhone(Request $request, string $reference, string $phone): ?Booking
     {
         $last4 = substr(Customer::normalisePhone($phone), -4);
         if (strlen($last4) < 4) {
             return null;
         }
 
-        return Booking::with(['service', 'customer'])
+        // References count per business, so the business is part of the key.
+        return Booking::with(['service', 'customer', 'resource'])
+            ->where('org_id', $this->publicOrgId($request))
             ->whereRaw('upper(reference) = ?', [strtoupper(trim($reference))])
             ->whereHas('customer', fn ($q) => $q->whereRaw('right(phone_digits, 4) = ?', [$last4]))
             ->first();

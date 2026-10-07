@@ -52,7 +52,7 @@ const SIZE = { sm: 'h-9 text-[13px]', md: 'h-10 text-sm' }
         :disabled="disabled"
         :aria-invalid="error ? true : undefined"
         :aria-describedby="describedBy"
-        class="focus:border-primary-400 bg-surface text-fg disabled:bg-surface-sunken disabled:text-fg-subtle w-full appearance-none rounded-[var(--radius-md)] border px-3 pe-9 transition-colors focus:outline-none"
+        class="focus:border-primary bg-surface text-fg disabled:bg-surface-sunken disabled:text-fg-subtle w-full appearance-none rounded-[var(--radius-md)] border px-3 pe-9 transition-colors focus:outline-none"
         :class="[SIZE[size], error ? 'border-danger-700/50' : 'border-border']"
         @change="$emit('update:modelValue', $event.target.value)"
       >

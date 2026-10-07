@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
-use App\Models\Organization;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -35,7 +34,7 @@ class CustomerController extends Controller
         $user = $request->user();
 
         if ($user?->isOperator()) {
-            $rows = Customer::where('org_id', $user->org_id ?? Organization::query()->value('id'))
+            $rows = Customer::where('org_id', $this->orgId($request))
                 ->orderBy('created_at')->get();
         } elseif ($user) {
             $rows = Customer::where('user_id', $user->id)->orderBy('created_at')->get();
@@ -57,10 +56,11 @@ class CustomerController extends Controller
             'customers.*.notes' => ['nullable', 'string'],
         ]);
 
-        $org = $request->user()->org_id ?? Organization::query()->value('id');
+        $org = $this->orgId($request);
 
         DB::transaction(function () use ($data, $org) {
             foreach ($data['customers'] as $row) {
+                $this->assertNotForeign(Customer::class, $row['id'], $org);
                 // updateOrCreate on the id, not the phone: the unique index on
                 // (org_id, phone_digits) is what dedupes, and letting it raise
                 // is better than racing it with a lookup.

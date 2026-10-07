@@ -10,7 +10,7 @@ class Resource extends Model
 {
     use HasUuids;
 
-    protected $fillable = ['id', 'org_id', 'name', 'is_active', 'sort_order'];
+    protected $fillable = ['id', 'org_id', 'name', 'role', 'is_active', 'sort_order'];
 
     protected function casts(): array
     {

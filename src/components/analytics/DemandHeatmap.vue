@@ -42,7 +42,7 @@ function hourLabel(h) {
 </script>
 
 <template>
-  <div class="overflow-x-auto">
+  <div class="relative overflow-x-auto">
     <table class="w-full min-w-[34rem] border-separate" style="border-spacing: 2px">
       <caption class="sr-only">
         عدد الحجوزات حسب اليوم والساعة

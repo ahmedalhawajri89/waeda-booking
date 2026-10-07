@@ -28,9 +28,13 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        // The demo business. The platform is وعدة; this is one place on it.
         $org = Organization::firstOrCreate(
-            ['slug' => 'bookingpro'],
-            ['name' => 'حجوزات برو', 'timezone' => 'Asia/Riyadh', 'currency' => 'SAR']
+            ['slug' => 'alrayhan'],
+            [
+                'name' => 'مركز الريحان', 'category' => 'عيادة جلدية وتجميل',
+                'address' => 'حي الياسمين، الرياض', 'timezone' => 'Asia/Riyadh', 'currency' => 'SAR',
+            ]
         );
 
         // The one account that can reach the console. Seeded rather than
@@ -42,8 +46,8 @@ class DatabaseSeeder extends Seeder
         $operator->save();
 
         $rooms = collect([
-            ['id' => (string) Str::uuid(), 'name' => 'غرفة ١'],
-            ['id' => (string) Str::uuid(), 'name' => 'غرفة ٢'],
+            ['id' => (string) Str::uuid(), 'name' => 'د. سارة العتيبي'],
+            ['id' => (string) Str::uuid(), 'name' => 'د. خالد المطيري'],
         ])->map(fn ($r, $i) => Resource::firstOrCreate(
             ['org_id' => $org->id, 'name' => $r['name']],
             ['id' => $r['id'], 'is_active' => true, 'sort_order' => $i]
@@ -51,22 +55,22 @@ class DatabaseSeeder extends Seeder
 
         $services = collect([
             [
-                'name' => 'استشارة طبية متخصصة',
-                'description' => 'جلسة استشارية شاملة مع طبيب مختص لمناقشة حالتك.',
+                'name' => 'استشارة جلدية',
+                'description' => 'فحص البشرة ومناقشة حالتك ووضع خطة علاج مناسبة.',
                 'duration_min' => 30, 'buffer_min' => 10, 'price_minor' => 15000,
-                'icon_key' => 'HeartPulse', 'rooms' => [0, 1],
+                'icon_key' => 'Stethoscope', 'rooms' => [0, 1],
             ],
             [
-                'name' => 'قص شعر وتصفيف VIP',
-                'description' => 'تصفيف وقص شعر بأحدث القصات مع عناية خاصة بالفروة.',
-                'duration_min' => 45, 'buffer_min' => 15, 'price_minor' => 8000,
-                'icon_key' => 'Scissors', 'rooms' => [0],
+                'name' => 'تنظيف بشرة عميق',
+                'description' => 'تنظيف وتقشير وترطيب، مناسب لكل أنواع البشرة.',
+                'duration_min' => 45, 'buffer_min' => 15, 'price_minor' => 22000,
+                'icon_key' => 'Sparkles', 'rooms' => [0],
             ],
             [
-                'name' => 'حجز طاولة عشاء',
-                'description' => 'حجز طاولة في القسم الهادئ مع إطلالة بانورامية وتجهيزات خاصة.',
-                'duration_min' => 120, 'buffer_min' => 30, 'price_minor' => 20000,
-                'icon_key' => 'Coffee', 'rooms' => [1],
+                'name' => 'جلسة ليزر',
+                'description' => 'جلسة إزالة شعر بالليزر لمنطقة كاملة، بأجهزة معتمدة.',
+                'duration_min' => 120, 'buffer_min' => 30, 'price_minor' => 45000,
+                'icon_key' => 'HeartPulse', 'rooms' => [1],
             ],
         ])->map(function ($s, $i) use ($org, $rooms) {
             $service = Service::firstOrCreate(

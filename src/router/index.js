@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { setPublicOrg } from '@/data/api/client'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -18,6 +19,19 @@ const router = createRouter({
       meta: { title: 'احجز موعدك' },
     },
     { path: '/booking', redirect: '/book' },
+    // A business's own booking link, and the manage page under it.
+    {
+      path: '/b/:slug',
+      name: 'business-book',
+      component: () => import('@/views/BookingView.vue'),
+      meta: { title: 'احجز موعدك' },
+    },
+    {
+      path: '/b/:slug/booking/:reference',
+      name: 'business-my-booking',
+      component: () => import('@/views/MyBookingView.vue'),
+      meta: { title: 'حجزي' },
+    },
     {
       path: '/booking/:reference',
       name: 'my-booking',
@@ -56,6 +70,12 @@ const router = createRouter({
           name: 'calendar',
           component: () => import('@/views/app/CalendarView.vue'),
           meta: { title: 'التقويم' },
+        },
+        {
+          path: 'guard',
+          name: 'guard',
+          component: () => import('@/views/app/GuardView.vue'),
+          meta: { title: 'حارس المواعيد' },
         },
         {
           path: 'analytics',
@@ -113,21 +133,31 @@ const router = createRouter({
  * resolves immediately.
  */
 router.beforeEach(async (to) => {
+  // Guest pages speak for the business in their link; every other page,
+  // the console included, must not carry it.
+  setPublicOrg(to.params.slug ? String(to.params.slug) : null)
+
   const auth = useAuthStore()
   await auth.init()
 
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
+  // Signed in is not the same as allowed in. A customer account reached the
+  // whole operator console before this — the API refused its writes, but the
+  // screens rendered. The console is for operators; customers go to booking.
+  if (to.meta.requiresAuth && !auth.isOperator) {
+    return { path: '/book' }
+  }
   if (to.meta.guestOnly && auth.isAuthenticated) {
-    return { name: 'today' }
+    return auth.isOperator ? { name: 'today' } : { path: '/book' }
   }
   return true
 })
 
 router.afterEach((to) => {
   const title = to.meta.title
-  document.title = title ? `${title} — حجوزات برو` : 'حجوزات برو'
+  document.title = title ? `${title} · وعدة` : 'وعدة'
 })
 
 export default router

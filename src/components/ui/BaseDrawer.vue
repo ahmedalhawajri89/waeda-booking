@@ -26,7 +26,7 @@ useFocusTrap(toRef(props, 'open'), panel, () => emit('close'))
     <Transition name="fade">
       <div
         v-if="open"
-        class="fixed inset-0 z-40 bg-gray-900/25 backdrop-blur-[2px]"
+        class="bg-overlay fixed inset-0 z-40 backdrop-blur-[2px]"
         @click="emit('close')"
       />
     </Transition>
@@ -39,16 +39,24 @@ useFocusTrap(toRef(props, 'open'), panel, () => emit('close'))
         aria-modal="true"
         :aria-label="title"
         class="elev-modal inset-inline-end-0 bg-surface fixed inset-y-0 z-50 flex w-full flex-col"
-        :class="width === 'lg' ? 'sm:w-[560px]' : 'sm:w-[480px]'"
+        :class="width === 'xl' ? 'sm:w-[640px]' : width === 'lg' ? 'sm:w-[560px]' : 'sm:w-[480px]'"
         style="inset-inline-end: 0"
       >
-        <header class="flex items-start justify-between gap-4 border-b border-gray-200 px-5 py-4">
+        <header class="border-border flex items-start justify-between gap-4 border-b px-5 py-4">
           <div class="min-w-0">
-            <h2 class="truncate text-base font-bold text-gray-900">{{ title }}</h2>
-            <p v-if="subtitle" class="mt-0.5 truncate text-sm text-gray-500">{{ subtitle }}</p>
+            <h2 class="text-fg truncate text-base font-bold">{{ title }}</h2>
+            <p v-if="subtitle" class="text-fg-subtle mt-0.5 truncate text-sm">{{ subtitle }}</p>
           </div>
-          <IconButton :icon="X" label="إغلاق" @click="emit('close')" />
+          <div class="flex shrink-0 items-center gap-1">
+            <slot name="actions" />
+            <IconButton :icon="X" label="إغلاق" data-autofocus @click="emit('close')" />
+          </div>
         </header>
+
+        <!-- Stays put while the body scrolls: status, the next step, tabs. -->
+        <div v-if="$slots.top" class="border-border border-b px-5 pt-4">
+          <slot name="top" />
+        </div>
 
         <div class="flex-1 overflow-y-auto overscroll-contain px-5 py-5">
           <slot />
@@ -56,7 +64,7 @@ useFocusTrap(toRef(props, 'open'), panel, () => emit('close'))
 
         <footer
           v-if="$slots.footer"
-          class="bg-surface sticky bottom-0 border-t border-gray-200 px-5 py-3"
+          class="bg-surface border-border sticky bottom-0 border-t px-5 py-3"
         >
           <slot name="footer" />
         </footer>

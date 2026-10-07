@@ -19,11 +19,13 @@ import KpiCard from '@/components/analytics/KpiCard.vue'
 import BaseChart from '@/components/analytics/BaseChart.vue'
 import DemandHeatmap from '@/components/analytics/DemandHeatmap.vue'
 import { useBookingsStore } from '@/stores/bookings'
-import { businessHours, serviceById } from '@/data/catalog'
+import { businessHours, resourceById, serviceById } from '@/data/catalog'
+import { initialOf } from '@/data/business'
 import { chartColors } from '@/composables/useChartTheme'
-import { money } from '@/lib/format'
+import { duration, money } from '@/lib/format'
 import {
   byChannel,
+  byResource,
   byStatus,
   computeKpis,
   dailySeries,
@@ -46,9 +48,9 @@ const route = useRoute()
 const router = useRouter()
 
 const RANGES = [
-  { value: '7', label: '٧ أيام' },
-  { value: '30', label: '٣٠ يوماً' },
-  { value: '90', label: '٩٠ يوماً' },
+  { value: '7', label: '7 أيام' },
+  { value: '30', label: '30 يوماً' },
+  { value: '90', label: '90 يوماً' },
 ]
 
 const days = ref(String(route.query.range ?? '30'))
@@ -66,6 +68,16 @@ const series = computed(() => dailySeries(store.items, range.value))
 const channels = computed(() => byChannel(store.items, range.value))
 const statuses = computed(() => byStatus(store.items, range.value))
 const services = computed(() => topServices(store.items, range.value))
+/** Per person on the team, with each one's share of the period's revenue. */
+const team = computed(() => {
+  const rows = byResource(store.items, range.value)
+  const total = rows.reduce((s, r) => s + r.revenueMinor, 0) || 1
+  return rows.map((r) => ({
+    ...r,
+    resource: resourceById(r.resourceId),
+    share: r.revenueMinor / total,
+  }))
+})
 
 const FROM_HOUR = 8
 const TO_HOUR = 20
@@ -219,7 +231,7 @@ const summary = computed(
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="w-full space-y-6 p-4 lg:p-6 2xl:px-8">
     <header class="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h1 class="type-h3 text-fg">التحليلات</h1>
@@ -230,7 +242,7 @@ const summary = computed(
 
     <ErrorState v-if="store.error" :message="store.error" @retry="store.load(true)" />
 
-    <div v-else-if="store.isLoading" class="space-y-4">
+    <div v-else-if="store.isLoading && !store.loaded" class="space-y-4">
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <SkeletonBlock v-for="n in 6" :key="n" variant="card" />
       </div>
@@ -326,14 +338,81 @@ const summary = computed(
         <DemandHeatmap :cells="heatmap" :from-hour="FROM_HOUR" :to-hour="TO_HOUR" />
       </section>
 
-      <section class="surface p-4">
-        <h2 class="type-h3 text-fg mb-4">أعلى الخدمات إيراداً</h2>
-        <BaseChart
-          :config="servicesChart"
-          :height="Math.max(160, services.length * 52)"
-          summary="أعمدة أفقية تعرض إيراد كل خدمة خلال الفترة المختارة، مرتّبة تنازلياً."
-        />
-      </section>
+      <div class="grid gap-4 xl:grid-cols-2">
+        <section class="surface overflow-hidden" aria-labelledby="team-h">
+          <header class="border-border border-b px-4 py-3">
+            <h2 id="team-h" class="type-h3 text-fg">الأداء حسب المختص</h2>
+            <p class="text-fg-subtle text-[13px]">من يحمل الإيراد، ومن يغيب عملاؤه أكثر.</p>
+          </header>
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-border text-fg-subtle border-b text-xs">
+                <th scope="col" class="px-4 py-2 text-start font-semibold">المختص</th>
+                <th scope="col" class="px-4 py-2 text-end font-semibold">الحجوزات</th>
+                <th scope="col" class="px-4 py-2 text-end font-semibold">الوقت المحجوز</th>
+                <th scope="col" class="px-4 py-2 text-end font-semibold">الغياب</th>
+                <th scope="col" class="px-4 py-2 text-start font-semibold">الإيراد</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="r in team"
+                :key="r.resourceId"
+                class="border-border border-b last:border-b-0"
+              >
+                <td class="px-4 py-3">
+                  <span class="flex items-center gap-2.5">
+                    <span
+                      class="bg-surface-sunken text-fg grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold"
+                      aria-hidden="true"
+                      >{{ initialOf(r.resource?.name) }}</span
+                    >
+                    <span class="min-w-0">
+                      <span class="text-fg block truncate font-semibold">{{
+                        r.resource?.name ?? 'محذوف'
+                      }}</span>
+                      <span v-if="r.resource?.role" class="text-fg-subtle block truncate text-xs">{{
+                        r.resource.role
+                      }}</span>
+                    </span>
+                  </span>
+                </td>
+                <td class="text-fg px-4 py-3 text-end font-semibold" data-numeric>{{ r.count }}</td>
+                <td class="text-fg-muted px-4 py-3 text-end whitespace-nowrap">
+                  {{ duration(Math.round(r.bookedMin)) }}
+                </td>
+                <td
+                  class="px-4 py-3 text-end"
+                  :class="r.noShowRate > 0.15 ? 'text-danger-700 font-semibold' : 'text-fg-muted'"
+                  data-numeric
+                >
+                  {{ pct(r.noShowRate) }}
+                </td>
+                <td class="w-[38%] px-4 py-3">
+                  <span class="text-fg block text-xs font-semibold" data-numeric>{{
+                    money(r.revenueMinor)
+                  }}</span>
+                  <span class="bg-surface-sunken mt-1 block h-1.5 overflow-hidden rounded-full">
+                    <span
+                      class="bg-fg block h-full rounded-full"
+                      :style="{ width: `${Math.round(r.share * 100)}%` }"
+                    />
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="surface p-4">
+          <h2 class="type-h3 text-fg mb-4">أعلى الخدمات إيراداً</h2>
+          <BaseChart
+            :config="servicesChart"
+            :height="Math.max(160, services.length * 52)"
+            summary="أعمدة أفقية تعرض إيراد كل خدمة خلال الفترة المختارة، مرتّبة تنازلياً."
+          />
+        </section>
+      </div>
     </template>
   </div>
 </template>

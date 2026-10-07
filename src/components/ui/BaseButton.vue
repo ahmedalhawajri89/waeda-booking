@@ -16,9 +16,10 @@ const props = defineProps({
 
 const VARIANT = {
   primary:
-    'bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800 border-transparent',
-  secondary: 'bg-surface text-gray-700 hover:bg-gray-50 active:bg-gray-100 border-gray-200',
-  ghost: 'bg-transparent text-gray-600 hover:bg-gray-100 active:bg-gray-200 border-transparent',
+    'bg-primary text-white hover:bg-primary-hover active:bg-primary-active border-transparent',
+  secondary:
+    'bg-surface text-fg-muted hover:bg-surface-hover active:bg-surface-sunken border-border',
+  ghost: 'bg-transparent text-fg-muted hover:bg-surface-sunken active:bg-border border-transparent',
   danger: 'bg-surface text-danger-700 hover:bg-danger-50 active:bg-danger-100 border-danger-700/25',
 }
 

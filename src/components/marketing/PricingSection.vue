@@ -26,7 +26,7 @@ const PLANS = [
     cta: 'ابدأ التجربة',
     featured: true,
   },
-  { name: 'المنشآت', monthly: 199, tagline: 'لعدة فروع تحت إدارة واحدة.', cta: 'ابدأ التجربة' },
+  { name: 'المنشآت', monthly: 199, tagline: 'للمنشآت الأكبر وفرق العمل.', cta: 'ابدأ التجربة' },
 ]
 
 /** One row per capability, one cell per plan — the whole point of the layout. */
@@ -38,8 +38,8 @@ const FEATURES = [
   { label: 'تتبّع المدفوعات والعربون', included: [false, true, true] },
   { label: 'ملفات العملاء وسجلهم', included: [false, true, true] },
   { label: 'سجل تدقيق كامل', included: [false, true, true] },
-  { label: 'فروع متعددة', included: [false, false, true] },
-  { label: 'صلاحيات مخصّصة وAPI', included: [false, false, true] },
+  { label: 'فروع متعددة (قريباً)', included: [false, false, true] },
+  { label: 'ربط مع أنظمتك عبر API', included: [false, false, true] },
 ]
 
 const price = computed(() => (p) => {
@@ -51,11 +51,7 @@ const price = computed(() => (p) => {
 <template>
   <section id="pricing" class="section bg-canvas">
     <div class="section-inner">
-      <SectionHeading
-        eyebrow="الأسعار"
-        title="ابدأ مجاناً، وادفع حين يكبر نشاطك"
-        lede="بلا عقود، بلا رسوم إعداد."
-      />
+      <SectionHeading title="ابدأ مجاناً، وادفع حين يكبر نشاطك" lede="بلا عقود، بلا رسوم إعداد." />
 
       <!-- billing toggle -->
       <div v-reveal class="mb-10 flex items-center justify-center gap-3">
@@ -68,12 +64,12 @@ const price = computed(() => (p) => {
           :aria-checked="yearly"
           aria-label="التبديل بين الدفع الشهري والسنوي"
           class="relative h-7 shrink-0 rounded-full border transition-colors"
-          :class="yearly ? 'bg-primary-600 border-primary-600' : 'border-border bg-surface-sunken'"
+          :class="yearly ? 'bg-primary border-primary' : 'border-border bg-surface-sunken'"
           style="width: 3.25rem"
           @click="yearly = !yearly"
         >
           <span
-            class="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all duration-300"
+            class="bg-surface absolute top-0.5 h-5 w-5 rounded-full shadow transition-all duration-300"
             :style="{ insetInlineStart: yearly ? 'calc(100% - 1.375rem)' : '0.125rem' }"
           />
         </button>
@@ -81,7 +77,7 @@ const price = computed(() => (p) => {
           سنوي
         </span>
         <span class="bg-success-50 text-success-700 rounded-full px-2 py-0.5 text-[11px] font-bold">
-          وفّر ٢٠٪
+          وفّر 20%
         </span>
       </div>
 
@@ -98,17 +94,17 @@ const price = computed(() => (p) => {
                 v-for="p in PLANS"
                 :key="p.name"
                 scope="col"
-                class="bg-canvas sticky top-16 z-10 px-4 pb-5 align-bottom sm:top-20"
+                class="bg-canvas sticky top-16 z-10 px-4 pb-5 align-bottom"
               >
                 <div
                   class="rounded-[var(--radius-lg)] border p-4 text-center"
                   :class="
                     p.featured
-                      ? 'border-primary-300 bg-primary-50 elev-raised'
+                      ? 'border-primary-line bg-primary-soft elev-raised'
                       : 'border-border bg-surface'
                   "
                 >
-                  <p v-if="p.featured" class="text-primary-700 mb-1 text-[11px] font-bold">
+                  <p v-if="p.featured" class="text-primary-fg mb-1 text-[11px] font-bold">
                     الأكثر اختياراً
                   </p>
                   <p class="type-h3 text-fg">{{ p.name }}</p>
@@ -123,7 +119,7 @@ const price = computed(() => (p) => {
                     :class="
                       p.featured
                         ? 'btn-brand'
-                        : 'border-border hover:border-primary-300 hover:bg-primary-50 text-fg border'
+                        : 'border-border hover:border-primary-line hover:bg-primary-soft text-fg border'
                     "
                   >
                     {{ p.cta }}
@@ -157,10 +153,12 @@ const price = computed(() => (p) => {
           v-reveal="pi * 90"
           class="rounded-[var(--radius-xl)] border p-5"
           :class="
-            p.featured ? 'border-primary-300 elev-raised bg-primary-50' : 'border-border bg-surface'
+            p.featured
+              ? 'border-primary-line elev-raised bg-primary-soft'
+              : 'border-border bg-surface'
           "
         >
-          <p v-if="p.featured" class="text-primary-700 mb-1 text-[11px] font-bold">
+          <p v-if="p.featured" class="text-primary-fg mb-1 text-[11px] font-bold">
             الأكثر اختياراً
           </p>
           <h3 class="type-h3 text-fg">{{ p.name }}</h3>
@@ -175,7 +173,7 @@ const price = computed(() => (p) => {
             :class="
               p.featured
                 ? 'btn-brand'
-                : 'border-border hover:border-primary-300 text-fg bg-surface border'
+                : 'border-border hover:border-primary-line text-fg bg-surface border'
             "
           >
             {{ p.cta }}

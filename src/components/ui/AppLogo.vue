@@ -1,30 +1,46 @@
 <script setup>
-import { Calendar } from 'lucide-vue-next'
-
+/**
+ * The mark is the brand's own first letter, و, drawn as a geometric stroke:
+ * its head is a ring, and inside the ring sits one orange dot — the
+ * appointment, held. It draws in `currentColor`, so it follows the theme and
+ * turns white on an inverse surface without a second asset.
+ */
 defineProps({
   compact: { type: Boolean, required: false, default: false },
   inverse: { type: Boolean, required: false, default: false },
+  /** The mark alone, for tight spots (collapsed rail, favicon-sized uses). */
+  markOnly: { type: Boolean, required: false, default: false },
 })
 </script>
 
 <template>
-  <RouterLink to="/" class="flex items-center gap-2">
-    <div
-      class="rounded-xl text-white"
-      :class="[
-        compact ? 'p-1.5' : 'p-2.5',
-        inverse
-          ? 'border border-white/25 bg-white/10 backdrop-blur'
-          : 'bg-brand shadow-primary-500/25 shadow-lg',
-      ]"
+  <RouterLink
+    to="/"
+    class="flex items-center gap-2"
+    :class="inverse ? 'text-white' : 'text-fg'"
+    aria-label="وعدة، الصفحة الرئيسية"
+  >
+    <svg
+      :class="compact ? 'h-8 w-8' : 'h-9 w-9'"
+      viewBox="0 0 32 32"
+      fill="none"
+      aria-hidden="true"
     >
-      <Calendar :class="compact ? 'h-5 w-5' : 'h-6 w-6'" />
-    </div>
+      <circle cx="18.5" cy="11" r="7" stroke="currentColor" stroke-width="2.8" />
+      <path
+        d="M25.5 11v4c0 7.7-6.1 13.5-13.75 13.5H7"
+        stroke="currentColor"
+        stroke-width="2.8"
+        stroke-linecap="round"
+      />
+      <circle cx="18.5" cy="11" r="3" fill="#E5562B" />
+    </svg>
     <span
-      class="font-bold tracking-tight"
-      :class="[compact ? 'text-xl' : 'text-2xl', inverse ? 'text-white' : 'text-fg']"
+      v-if="!markOnly"
+      class="font-display leading-none font-bold"
+      :class="compact ? 'text-[1.35rem]' : 'text-2xl'"
     >
-      حجوزات<span :class="inverse ? 'text-accent-300' : 'text-gradient'">برو</span>
+      وعدة
     </span>
   </RouterLink>
 </template>

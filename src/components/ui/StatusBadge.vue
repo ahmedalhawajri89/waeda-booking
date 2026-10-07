@@ -26,8 +26,8 @@ const TONE = {
   warning: 'bg-warning-50 text-warning-700 border-warning-100',
   danger: 'bg-danger-50 text-danger-700 border-danger-100',
   info: 'bg-info-50 text-info-700 border-info-100',
-  neutral: 'bg-gray-100 text-gray-700 border-gray-200',
-  muted: 'bg-gray-50 text-gray-500 border-gray-200',
+  neutral: 'bg-surface-sunken text-fg-muted border-border',
+  muted: 'bg-canvas text-fg-subtle border-border',
 }
 </script>
 

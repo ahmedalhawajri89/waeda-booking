@@ -8,8 +8,8 @@ defineProps({
 })
 
 const VARIANT = {
-  ghost: 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 border-transparent',
-  secondary: 'bg-surface text-gray-600 hover:bg-gray-50 border-gray-200',
+  ghost: 'text-fg-subtle hover:bg-surface-sunken hover:text-fg border-transparent',
+  secondary: 'bg-surface text-fg-muted hover:bg-surface-hover border-border',
   danger: 'text-danger-700 hover:bg-danger-50 border-transparent',
 }
 </script>

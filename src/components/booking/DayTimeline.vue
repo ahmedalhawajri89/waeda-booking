@@ -4,8 +4,9 @@ import { differenceInMinutes, isSameDay, set, startOfDay } from 'date-fns'
 import { useBookingsStore } from '@/stores/bookings'
 import { businessHours } from '@/data/catalog'
 import { hoursFor } from '@/lib/availability'
+import { assignLanes } from '@/lib/lanes'
 import { time } from '@/lib/format'
-import { BOOKING_STATUS } from '@/lib/status'
+import { BOOKING_STATUS, TONE_BLOCK } from '@/lib/status'
 
 /**
  * The day as a proportional timeline rather than a list. Free time reads as
@@ -46,15 +47,17 @@ const ticks = computed(() => {
 const blocks = computed(() => {
   const b = bounds.value
   if (!b) return []
-  return props.bookings
-    .filter((bk) => bk.status !== 'cancelled')
-    .map((bk) => {
-      const start = new Date(bk.startAt)
-      const end = new Date(bk.endAt)
-      const top = Math.max(0, differenceInMinutes(start, b.open)) * PX_PER_MIN
-      const height = Math.max(26, differenceInMinutes(end, start) * PX_PER_MIN)
-      return { booking: bk, view: store.hydrate(bk), top, height }
-    })
+  return assignLanes(
+    props.bookings
+      .filter((bk) => bk.status !== 'cancelled')
+      .map((bk) => {
+        const start = new Date(bk.startAt)
+        const end = new Date(bk.endAt)
+        const top = Math.max(0, differenceInMinutes(start, b.open)) * PX_PER_MIN
+        const height = Math.max(26, differenceInMinutes(end, start) * PX_PER_MIN)
+        return { booking: bk, view: store.hydrate(bk), top, height }
+      }),
+  )
 })
 
 /** Only meaningful when the timeline is showing today. */
@@ -66,18 +69,11 @@ const nowTop = computed(() => {
   return mins * PX_PER_MIN
 })
 
-const TONE = {
-  success: 'border-success-700/30 bg-success-50 text-success-700',
-  warning: 'border-warning-700/30 bg-warning-50 text-warning-700',
-  danger: 'border-danger-700/30 bg-danger-50 text-danger-700',
-  info: 'border-info-700/30 bg-info-50 text-info-700',
-  neutral: 'border-gray-300 bg-gray-100 text-gray-700',
-  muted: 'border-gray-200 bg-gray-50 text-gray-400',
-}
+const TONE = TONE_BLOCK
 </script>
 
 <template>
-  <div v-if="!bounds" class="px-4 py-10 text-center text-sm text-gray-500">مغلق في هذا اليوم.</div>
+  <div v-if="!bounds" class="text-fg-subtle px-4 py-10 text-center text-sm">مغلق في هذا اليوم.</div>
 
   <div v-else class="relative" :style="{ height: `${bounds.totalMin * PX_PER_MIN + 16}px` }">
     <!-- hour rail -->
@@ -87,8 +83,8 @@ const TONE = {
       class="inset-inline-start-0 absolute flex w-full items-center gap-2"
       :style="{ top: `${t.top}px` }"
     >
-      <span class="w-14 shrink-0 text-[11px] text-gray-400" data-numeric>{{ t.label }}</span>
-      <span class="h-px flex-1 bg-gray-100" />
+      <span class="text-fg-faint w-14 shrink-0 text-[11px]" data-numeric>{{ t.label }}</span>
+      <span class="bg-surface-sunken h-px flex-1" />
     </div>
 
     <!-- now -->
@@ -99,8 +95,8 @@ const TONE = {
       aria-label="الوقت الحالي"
     >
       <span class="w-14 shrink-0" />
-      <span class="bg-primary-600 h-2 w-2 shrink-0 rounded-full" />
-      <span class="bg-primary-500 h-px flex-1" />
+      <span class="bg-primary h-2 w-2 shrink-0 rounded-full" />
+      <span class="bg-primary h-px flex-1" />
     </div>
 
     <!-- bookings -->
@@ -113,8 +109,8 @@ const TONE = {
       :style="{
         top: `${b.top}px`,
         height: `${b.height}px`,
-        insetInlineStart: '60px',
-        insetInlineEnd: '0px',
+        insetInlineStart: `calc(60px + (100% - 60px) * ${b.lane} / ${b.lanes})`,
+        width: `calc((100% - 60px) / ${b.lanes} - ${b.lanes > 1 ? 4 : 0}px)`,
       }"
       @click="$emit('open', b.booking.id)"
     >

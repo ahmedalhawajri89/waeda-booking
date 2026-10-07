@@ -12,28 +12,57 @@ import { request } from './client'
  * left to live. The seam is still the seam: the storage schema is snake_case
  * and stays behind the controller.
  *
- * The save* methods take a whole array because that is the shape the stores
- * speak, and changing it would mean rewriting every caller. The server takes
- * that array in one transaction, so a bulk save is still atomic — which is the
- * property that actually matters. Granular writes remain the better answer and
- * remain the next step.
+ * Bookings are written one at a time: POST to create under a client-chosen
+ * UUID (so a retry cannot book twice), PATCH to change. They used to go up as
+ * the whole list in a PUT, which re-created every booking the server had not
+ * seen under the client's id — that is, all of them, on every save.
  */
 export class ApiRepository {
   async loadBookings() {
     return request('/bookings')
   }
 
-  async saveBookings(bookings) {
-    if (bookings.length === 0) return
+  /** What the server accepts for a booking; it computes the rest. */
+  static #body(b) {
+    return {
+      customerId: b.customerId,
+      serviceId: b.serviceId,
+      resourceId: b.resourceId,
+      startAt: b.startAt,
+      status: b.status,
+      paymentStatus: b.paymentStatus,
+      channel: b.channel,
+      // null, not undefined: undefined drops out of the JSON, and the server
+      // reads an absent note as "leave it alone" — so it could never be cleared.
+      notes: b.notes ?? null,
+    }
+  }
+
+  /** The server refuses an overlap inside the transaction that writes it.
+   *  Surfacing it as a typed error lets the stores say "that time is taken"
+   *  rather than showing an operator a database message. */
+  static async #write(call) {
     try {
-      await request('/bookings', { method: 'PUT', body: { bookings } })
+      return await call()
     } catch (e) {
-      // The server refuses an overlap inside the transaction that writes it.
-      // Surfacing it as a typed error lets the stores say "that time is taken"
-      // rather than showing an operator a database message.
       if (e.status === 409) throw new ConflictError()
       throw e
     }
+  }
+
+  async createBooking(booking) {
+    return ApiRepository.#write(() =>
+      request('/bookings', {
+        method: 'POST',
+        body: { id: booking.id, ...ApiRepository.#body(booking) },
+      }),
+    )
+  }
+
+  async updateBooking(booking) {
+    return ApiRepository.#write(() =>
+      request(`/bookings/${booking.id}`, { method: 'PATCH', body: ApiRepository.#body(booking) }),
+    )
   }
 
   async loadCustomers() {
@@ -51,6 +80,53 @@ export class ApiRepository {
 
   async saveCatalog(snapshot) {
     await request('/catalog', { method: 'PUT', body: snapshot })
+  }
+
+  async loadGuardPolicy() {
+    const { policy } = await request('/guard/policy')
+    return policy
+  }
+
+  async saveGuardPolicy(policy) {
+    await request('/guard/policy', { method: 'PUT', body: policy })
+  }
+
+  async loadMessages() {
+    return request('/guard/messages')
+  }
+
+  /** The server also runs this on a schedule; calling it here just means now. */
+  async guardTick() {
+    return request('/guard/tick', { method: 'POST' })
+  }
+
+  async sendStaffMessage(bookingId, body) {
+    return request(`/guard/conversations/${bookingId}/messages`, { method: 'POST', body: { body } })
+  }
+
+  async resolveConversation(bookingId) {
+    return request(`/guard/conversations/${bookingId}/resolve`, { method: 'POST' })
+  }
+
+  async sendReply(bookingId, text) {
+    return request('/guard/replies', { method: 'POST', body: { bookingId, text } })
+  }
+
+  async loadWaitlist() {
+    return request('/guard/waitlist')
+  }
+
+  /** Public: the booking page offers it to guests when a day is full. */
+  async joinWaitlist(input) {
+    await request('/public/waitlist', { method: 'POST', body: input, auth: false })
+  }
+
+  async removeFromWaitlist(id) {
+    await request(`/guard/waitlist/${id}`, { method: 'DELETE' })
+  }
+
+  async replyToOffer(offerId, text) {
+    return request(`/guard/offers/${offerId}/replies`, { method: 'POST', body: { text } })
   }
 
   /**

@@ -1,109 +1,204 @@
 @import 'tailwindcss';
 
+/* Dark mode is a data attribute, not a media query: it follows the device
+   until the operator picks one, and then it follows them (src/composables/useTheme.js,
+   plus the inline script in index.html that sets it before first paint). */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
 /* ==========================================================================
-   Design tokens
-   A neutral, modern SaaS identity: indigo brand, cyan accent, slate
-   neutrals. Every colour, radius and shadow in the app resolves to a token
-   declared below — nothing hard-codes a hex.
+   Design tokens — "ink & signal"
+   Paper white and ink black carry the whole interface. One colour, a burnt
+   orange, is reserved for what you act on and what needs you; if it is
+   orange, it matters. Every colour, radius and shadow resolves to a token
+   below; nothing hard-codes a hex.
+
+   Two layers. Primitives (scales) and roles (what a colour is *for*). Both
+   are CSS variables, so the dark theme further down redefines them in place
+   and every utility follows — including the neutral and status scales, which
+   invert, so a `text-gray-900` still reads as "strongest text" on a dark page.
    ========================================================================== */
 @theme {
-  /* --- primitives: brand (indigo) --- */
-  --color-primary-50: #eef2ff;
-  --color-primary-100: #e0e7ff;
-  --color-primary-200: #c7d2fe;
-  --color-primary-300: #a5b4fc;
-  --color-primary-400: #818cf8;
-  --color-primary-500: #6366f1;
-  --color-primary-600: #4f46e5;
-  --color-primary-700: #4338ca;
-  --color-primary-800: #3730a3;
-  --color-primary-900: #312e81;
-  --color-primary-950: #1e1b4b;
+  /* --- primary: signal orange ------------------------------------------- */
+  --color-primary-50: #fff4ee;
+  --color-primary-100: #ffe4d6;
+  --color-primary-200: #fec5aa;
+  --color-primary-300: #fb9c74;
+  --color-primary-400: #f2703f;
+  --color-primary-500: #e5562b;
+  --color-primary-600: #cf4417;
+  --color-primary-700: #b83a14;
+  --color-primary-800: #93300f;
+  --color-primary-900: #74280f;
+  --color-primary-950: #3f1305;
 
-  /* --- primitives: accent (cyan) --- */
-  --color-accent-50: #ecfeff;
-  --color-accent-100: #cffafe;
-  --color-accent-200: #a5f3fc;
-  --color-accent-400: #22d3ee;
-  --color-accent-500: #06b6d4;
-  --color-accent-600: #0891b2;
-  --color-accent-700: #0e7490;
-  --color-accent-900: #164e63;
+  /* --- accent: the same signal, so nothing competes with it -------------- */
+  --color-accent-50: #fff4ee;
+  --color-accent-100: #ffe4d6;
+  --color-accent-200: #fec5aa;
+  --color-accent-300: #fb9c74;
+  --color-accent-400: #f2703f;
+  --color-accent-500: #e5562b;
+  --color-accent-600: #cf4417;
+  --color-accent-700: #b83a14;
+  --color-accent-800: #93300f;
+  --color-accent-900: #74280f;
 
-  /* --- primitives: slate neutrals --- */
-  --color-gray-50: #f8fafc;
-  --color-gray-100: #f1f5f9;
-  --color-gray-200: #e2e8f0;
-  --color-gray-300: #cbd5e1;
-  --color-gray-400: #94a3b8;
-  --color-gray-500: #64748b;
-  --color-gray-600: #475569;
-  --color-gray-700: #334155;
-  --color-gray-800: #1e293b;
-  --color-gray-900: #0f172a;
+  /* --- neutrals: paper → ink, a hair warm so white never feels clinical -- */
+  --color-gray-50: #f7f7f5;
+  --color-gray-100: #f0f0ed;
+  --color-gray-200: #e7e7e3;
+  --color-gray-300: #d6d6d1;
+  --color-gray-400: #a3a39e;
+  --color-gray-500: #6b6b66;
+  --color-gray-600: #52524e;
+  --color-gray-700: #3d3d3a;
+  --color-gray-800: #262624;
+  --color-gray-900: #111110;
 
-  /* --- semantic: darkened so text on a -50 tint clears 4.5:1 --- */
-  --color-success-50: #ecfdf5;
-  --color-success-100: #d1fae5;
-  --color-success-700: #047857;
-  --color-warning-50: #fffbeb;
-  --color-warning-100: #fef3c7;
-  --color-warning-700: #b45309;
-  --color-danger-50: #fef2f2;
-  --color-danger-100: #fee2e2;
-  --color-danger-700: #b91c1c;
-  --color-info-50: #eff6ff;
-  --color-info-100: #dbeafe;
-  --color-info-700: #1d4ed8;
+  /* --- status: -50/-100 tints, -600 solid, -700 text on a tint (≥ 4.5:1).
+     Danger is a crimson and warning an amber, far enough from the signal
+     orange that a cancelled badge never reads as a button. ---------------- */
+  --color-success-50: #ecf8f1;
+  --color-success-100: #d2efdf;
+  --color-success-600: #15803d;
+  --color-success-700: #166534;
+  --color-warning-50: #fdf7e4;
+  --color-warning-100: #faecbd;
+  --color-warning-600: #a16207;
+  --color-warning-700: #854d0e;
+  --color-danger-50: #fdeef1;
+  --color-danger-100: #fad5dc;
+  --color-danger-600: #c81e3a;
+  --color-danger-700: #a3162f;
+  --color-info-50: #eef3fb;
+  --color-info-100: #d8e4f6;
+  --color-info-600: #2f5fb3;
+  --color-info-700: #244b91;
 
-  /* Latin and Arabic drawn as one family — the operator UI is full of times
-     and amounts, and a mismatched Latin fallback shows on every row. */
+  /* Arabic body in IBM Plex; headings in Alexandria — geometric, modern,
+     and drawn for Arabic first. Latin and digits come along in both. */
   --font-sans: 'IBM Plex Sans Arabic', 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Alexandria', 'IBM Plex Sans Arabic', ui-sans-serif, system-ui, sans-serif;
 
-  /* --- radius: encodes permanence, not decoration --- */
-  --radius-sm: 4px;
+  /* --- radius: crisp, not bubbly ---------------------------------------- */
+  --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
 
-  /* --- motion --- */
+  /* --- motion ------------------------------------------------------------ */
   --ease-out-soft: cubic-bezier(0.2, 0, 0, 1);
   --ease-drawer: cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* --- gradient: guest surfaces only --- */
-  --gradient-brand: linear-gradient(135deg, #818cf8 0%, #4f46e5 42%, #0891b2 100%);
-  --gradient-brand-soft: linear-gradient(135deg, #eef2ff 0%, #f0f9ff 55%, #ecfeff 100%);
-
-  /* --- semantic roles: the public API of the theme ---------------------
-     Everything above is a primitive; everything here is a *role*. New code
-     reaches for these, not for gray-200 or white, so re-skinning the product
-     is an edit to this block rather than a sweep across 43 files.
-     Registering them in @theme generates bg-surface / text-fg /
-     border-border as real utilities. */
-  --color-canvas: #f8fafc;
+  /* --- roles: the public API of the theme ------------------------------- */
+  --color-canvas: #fafaf9;
   --color-surface: #ffffff;
   --color-surface-raised: #ffffff;
-  --color-surface-sunken: #f1f5f9;
-  --color-surface-inverse: #0f172a;
-  --color-border: #e2e8f0;
-  --color-border-strong: #cbd5e1;
-  --color-fg: #0f172a;
-  --color-fg-muted: #475569;
-  --color-fg-subtle: #64748b;
+  --color-surface-sunken: #f4f4f2;
+  --color-surface-hover: #f5f5f3;
+  --color-surface-inverse: #111110;
+  /* Ink: the one dark surface, used sparingly (a code block, a tooltip). */
+  --color-ink: #111110;
+  --color-border: #e7e7e3;
+  --color-border-strong: #d6d6d1;
+  --color-fg: #111110;
+  --color-fg-muted: #52524e;
+  --color-fg-subtle: #6b6b66;
+  --color-fg-faint: #a3a39e;
+  --color-fg-inverse: #fafaf9;
   --color-fg-on-primary: #ffffff;
-  --color-overlay: rgb(15 23 42 / 0.45);
-  --color-ring: #6366f1;
+  --color-overlay: rgb(17 17 16 / 0.4);
+  --color-ring: #e5562b;
+
+  /* What you act on. `primary` is the solid (buttons, selected chips);
+     `primary-fg` is the same hue as text on a surface; `primary-soft` the
+     tint behind a selection; `primary-line` its border. */
+  --color-primary: #cf4417;
+  --color-primary-hover: #b83a14;
+  --color-primary-active: #93300f;
+  --color-primary-fg: #b83a14;
+  --color-primary-soft: #fff4ee;
+  --color-primary-line: #fec5aa;
+}
+
+/* ==========================================================================
+   Dark theme — near-black paper, off-white ink, the same signal.
+   Neutral and status scales invert (50 is the darkest); the brand scales
+   stay put, and the roles are re-chosen rather than inverted.
+   ========================================================================== */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-gray-50: #0c0c0b;
+  --color-gray-100: #161615;
+  --color-gray-200: #262624;
+  --color-gray-300: #34342f;
+  --color-gray-400: #5c5c57;
+  --color-gray-500: #9a9a94;
+  --color-gray-600: #b8b8b2;
+  --color-gray-700: #d0d0ca;
+  --color-gray-800: #e4e4df;
+  --color-gray-900: #f2f2ee;
+
+  --color-success-50: #0f2219;
+  --color-success-100: #153023;
+  --color-success-600: #22a05a;
+  --color-success-700: #7fd6a4;
+  --color-warning-50: #261f0d;
+  --color-warning-100: #362b12;
+  --color-warning-600: #c48a16;
+  --color-warning-700: #f0c860;
+  --color-danger-50: #2a1016;
+  --color-danger-100: #3c1620;
+  --color-danger-600: #d42a47;
+  --color-danger-700: #f7a1b0;
+  --color-info-50: #111c2e;
+  --color-info-100: #182840;
+  --color-info-600: #4a7fd6;
+  --color-info-700: #a3c2f2;
+
+  --color-canvas: #0c0c0b;
+  --color-surface: #161615;
+  --color-surface-raised: #1c1c1a;
+  --color-surface-sunken: #0a0a09;
+  --color-surface-hover: #1f1f1d;
+  --color-surface-inverse: #f2f2ee;
+  --color-border: #262624;
+  --color-border-strong: #34342f;
+  --color-fg: #f2f2ee;
+  --color-fg-muted: #b8b8b2;
+  --color-fg-subtle: #9a9a94;
+  --color-fg-faint: #5c5c57;
+  --color-fg-inverse: #111110;
+  --color-overlay: rgb(0 0 0 / 0.6);
+  --color-ring: #f2703f;
+
+  --color-primary: #cf4417;
+  --color-primary-hover: #e5562b;
+  --color-primary-active: #f2703f;
+  --color-primary-fg: #ff8a5c;
+  --color-primary-soft: #2a160d;
+  --color-primary-line: #5c2a14;
 }
 
 @layer base {
   * {
-    @apply border-gray-200;
+    @apply border-border;
   }
   html {
     scroll-behavior: smooth;
+    scroll-padding-top: 5rem;
   }
   body {
     @apply bg-canvas text-fg font-sans antialiased;
+    transition:
+      background-color 200ms ease-out,
+      color 200ms ease-out;
+  }
+  h1,
+  h2,
+  .font-display {
+    font-family: var(--font-display);
   }
 
   /* One focus ring, everywhere, never removed. */
@@ -114,7 +209,8 @@
   }
 
   ::selection {
-    @apply bg-primary-100 text-primary-900;
+    background: var(--color-primary-soft);
+    color: var(--color-fg);
   }
 
   /* Digits in columns must align. */
@@ -127,17 +223,26 @@
 }
 
 @layer utilities {
-  /* --- elevation: three levels, slate-tinted, border-first -------------
-     Shadows are cast in the neutral's own hue (15 23 42) rather than in
-     grey — a neutral-grey shadow over a slate surface reads muddy. */
+  /* --- elevation: three levels, ink-tinted, border-first ---------------
+     Shadows are cast in the ink's own warm hue (28 25 23) rather than in
+     grey, which reads muddy over sand. On the dark theme they deepen. */
   .elev-raised {
-    box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
+    box-shadow: 0 1px 2px rgb(17 17 16 / 0.06);
   }
   .elev-overlay {
-    box-shadow: 0 8px 24px rgb(15 23 42 / 0.1);
+    box-shadow: 0 10px 28px -6px rgb(17 17 16 / 0.14);
   }
   .elev-modal {
-    box-shadow: 0 24px 48px rgb(15 23 42 / 0.16);
+    box-shadow: 0 28px 56px -12px rgb(17 17 16 / 0.24);
+  }
+  :root[data-theme='dark'] .elev-raised {
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+  }
+  :root[data-theme='dark'] .elev-overlay {
+    box-shadow: 0 12px 32px -6px rgb(0 0 0 / 0.55);
+  }
+  :root[data-theme='dark'] .elev-modal {
+    box-shadow: 0 28px 64px -12px rgb(0 0 0 / 0.7);
   }
 
   /* --- operator density ------------------------------------------------ */
@@ -148,42 +253,43 @@
     @apply bg-surface-sunken;
   }
 
-  /* --- guest-only brand expression ------------------------------------- */
+  /* --- brand expression: flat, by decision ---------------------------
+     No gradients anywhere: solid emerald for what you act on, a calm tint
+     for what is highlighted. These class names survive from the gradient
+     era so every caller turned flat at once. */
   .bg-brand {
-    background-image: var(--gradient-brand);
+    background-color: var(--color-primary);
   }
   .bg-brand-soft {
-    background: var(--gradient-brand-soft);
+    background-color: var(--color-surface-sunken);
   }
   .text-gradient {
-    background-image: var(--gradient-brand);
-    @apply bg-clip-text text-transparent;
+    color: var(--color-primary-fg);
   }
   .ring-brand {
-    background:
-      linear-gradient(var(--color-surface), var(--color-surface)) padding-box,
-      var(--gradient-brand) border-box;
-    @apply border border-transparent;
+    @apply border-primary-line bg-surface border;
   }
   .btn-brand {
-    background-image: var(--gradient-brand);
-    background-size: 160% 100%;
-    background-position: 0% 50%;
-    @apply shadow-primary-500/25 text-white shadow-lg transition-[background-position,transform,box-shadow] duration-500;
+    background-color: var(--color-primary);
+    @apply text-white transition-colors duration-200;
   }
   .btn-brand:hover {
-    background-position: 100% 50%;
-    @apply shadow-accent-500/30 shadow-xl;
+    background-color: var(--color-primary-hover);
   }
   .mesh-brand::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background:
-      radial-gradient(48rem 32rem at 88% 8%, rgb(99 102 241 / 0.2), transparent 60%),
-      radial-gradient(42rem 30rem at 6% 92%, rgb(6 182 212 / 0.16), transparent 62%),
-      radial-gradient(36rem 26rem at 55% 40%, rgb(129 140 248 / 0.12), transparent 65%);
+    content: none;
+  }
+
+  /* --- najdi motif: stepped triangles, drawn in the border colour ------
+     Decoration for guest surfaces and empty states only, never behind data. */
+  .najdi {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='24' viewBox='0 0 48 24'%3E%3Cpath d='M0 24 12 12 24 24M24 24 36 12 48 24M12 12 18 6 24 12M36 12 42 6 48 12' fill='none' stroke='%23000' stroke-width='1'/%3E%3C/svg%3E");
+    background-size: 48px 24px;
+    opacity: 0.06;
+  }
+  :root[data-theme='dark'] .najdi {
+    filter: invert(1);
+    opacity: 0.07;
   }
 
   /* Hides content visually while keeping it available to screen readers. */
@@ -361,23 +467,27 @@ html[dir='rtl'] .skeleton::after {
      and Arabic gets a touch of word-spacing instead — same optical density,
      no damage to the script. */
   .type-display {
-    font-size: clamp(2.75rem, 7vw, 5.5rem);
-    line-height: 1.02;
+    font-family: var(--font-display);
+    font-size: clamp(2.6rem, 6.4vw, 5rem);
+    line-height: 1.15;
     font-weight: 700;
   }
   .type-h1 {
-    font-size: clamp(2rem, 4vw, 3.25rem);
-    line-height: 1.1;
+    font-family: var(--font-display);
+    font-size: clamp(1.85rem, 3.1vw, 2.6rem);
+    line-height: 1.2;
     font-weight: 700;
   }
   .type-h2 {
+    font-family: var(--font-display);
     font-size: clamp(1.5rem, 2.5vw, 2rem);
-    line-height: 1.2;
+    line-height: 1.3;
     font-weight: 600;
   }
   .type-h3 {
+    font-family: var(--font-display);
     font-size: 1.125rem;
-    line-height: 1.35;
+    line-height: 1.4;
     font-weight: 600;
   }
   .type-lede {
@@ -401,7 +511,7 @@ html[dir='rtl'] .skeleton::after {
 
   /* --- fine grain: keeps large washes from banding --------------------- */
   .grain::after {
-    content: '';
+    content: none;
     position: absolute;
     inset: 0;
     pointer-events: none;

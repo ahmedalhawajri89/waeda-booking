@@ -1,7 +1,7 @@
 <script setup>
 /**
  * One card recipe. Six marketing sections had each written their own
- * `rounded-xl border border-gray-200 bg-white p-6 hover:border-primary-200`,
+ * `rounded-xl border border-border bg-surface p-6 hover:border-primary-line`,
  * which is why the page read as the same block repeated down the scroll.
  *
  * Variety now comes from layout — bento spans, timelines, comparison tables —
@@ -43,7 +43,7 @@ const RADIUS = {
       VARIANT[variant],
       PADDING[padding],
       RADIUS[radius],
-      interactive && 'hover:border-primary-300 hover:elev-overlay cursor-pointer',
+      interactive && 'hover:border-primary-line hover:elev-overlay cursor-pointer',
     ]"
   >
     <slot />

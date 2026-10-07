@@ -1,12 +1,13 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { addMinutes, isAfter, isBefore, isSameDay } from 'date-fns'
+import { addMinutes, isAfter, isSameDay } from 'date-fns'
+import { toast } from 'vue-sonner'
 import { repository } from '@/data/repository'
-import { isConflict } from '@/data/errors'
+import { ConflictError, isConflict } from '@/data/errors'
 import { businessHours, resourceById, serviceById } from '@/data/catalog'
 import { hasConflict, occupancyFor } from '@/lib/availability'
-import { bookingReference, uid } from '@/lib/id'
 import { clone } from '@/lib/clone'
+import { dayLabel, time } from '@/lib/format'
 import { useCustomersStore } from './customers'
 
 const HOUR = 60 * 60 * 1000
@@ -34,18 +35,27 @@ export const useBookingsStore = defineStore('bookings', () => {
   }
 
   /**
-   * Fire-and-forget, but not fire-and-ignore.
+   * Saves one booking, optimistically.
    *
    * The mutations that call this are synchronous — the screen has already
-   * moved on by the time the write resolves — so it cannot be awaited without
-   * making every caller async. What it must not do is drop the failure: an
-   * unhandled rejection is a save that silently did not happen, which is the
-   * worst of both worlds. Surfacing it in `error` means the screen says so.
+   * moved on by the time the write resolves. On success the stored copy
+   * (server timestamps, server-written history) replaces ours; on failure the
+   * booking goes back to `before` and a toast says why. It used to set
+   * `error`, which the views render as a full-screen error state — so one
+   * refused edit replaced the whole page.
    */
-  function persist() {
-    repository.saveBookings(items.value).catch((e) => {
-      error.value = isConflict(e) ? e.message : 'تعذّر حفظ التغييرات.'
-    })
+  function persist(b, before) {
+    repository
+      .updateBooking(clone(b))
+      .then((saved) => Object.assign(b, saved))
+      .catch((e) => {
+        Object.assign(b, before)
+        toast.error(
+          isConflict(e)
+            ? 'هذا الوقت لم يعد متاحاً — أُعيد الحجز كما كان'
+            : 'تعذّر حفظ التغيير. أُعيد كما كان.',
+        )
+      })
   }
 
   /* ------------------------------------------------------------- getters */
@@ -154,20 +164,22 @@ export const useBookingsStore = defineStore('bookings', () => {
    *           paymentStatus?: import('@/types').PaymentStatus,
    *           channel?: import('@/types').BookingChannel,
    *           notes?: string }} input
-   * @returns {import('@/types').Booking}
+   * @returns {Promise<import('@/types').Booking>} as saved, with the reference the backend issued
+   * @throws {ConflictError} if the slot is taken
    */
-  function create(input) {
+  async function create(input) {
     const service = serviceById(input.serviceId)
     if (!service) throw new Error('unknown service')
 
     const start = new Date(input.startAt)
     const end = addMinutes(start, service.durationMin + service.bufferMin)
     const now = new Date().toISOString()
-    const year = start.getFullYear()
 
     const booking = {
-      id: uid('b_'),
-      reference: bookingReference(year, 500 + items.value.length + 1),
+      // A UUID the backend stores the booking under, so retrying the same
+      // create cannot book twice. The reference is the backend's to issue.
+      id: crypto.randomUUID(),
+      reference: '',
       customerId: input.customerId,
       serviceId: input.serviceId,
       resourceId: input.resourceId,
@@ -186,9 +198,11 @@ export const useBookingsStore = defineStore('bookings', () => {
       booking.history.push({ at: now, type: 'confirmed', summary: 'تم تأكيد الحجز' })
     }
 
-    items.value.push(booking)
-    persist()
-    return booking
+    if (hasConflict(booking, items.value)) throw new ConflictError()
+
+    const saved = await repository.createBooking(booking)
+    items.value.push(saved)
+    return saved
   }
 
   function setStatus(id, status) {
@@ -212,9 +226,10 @@ export const useBookingsStore = defineStore('bookings', () => {
               ? 'no_show'
               : 'note_added'
 
+    const before = clone(b)
     b.status = status
     appendEvent(b, eventType, summaries[status])
-    persist()
+    persist(b, before)
   }
 
   function setPayment(id, paymentStatus) {
@@ -226,51 +241,93 @@ export const useBookingsStore = defineStore('bookings', () => {
       paid: 'سُجّل الدفع كاملاً',
       refunded: 'تمت إعادة المبلغ',
     }
+    const before = clone(b)
     b.paymentStatus = paymentStatus
     appendEvent(b, 'payment_recorded', summaries[paymentStatus])
-    persist()
+    persist(b, before)
   }
 
   /**
-   * Returns false and writes nothing if the new slot is taken.
+   * Move a booking to another time, another person, or both. Returns a reason
+   * string when it refuses ('conflict' · 'not_offered'), true when it moved.
    *
-   * Until now the only thing stopping a double-booking here was that
-   * TimeSlotGrid does not offer occupied slots — correct for the one path
-   * that exists, but the store would happily write an overlap for any caller
-   * that skipped the grid. The rule belongs with the data, not with one form.
+   * The checks live here rather than in a form: the calendar's drag-and-drop
+   * and the reschedule drawer both come through this one door, and a slot
+   * offered by neither can still be refused.
+   *
+   * @param {string} id
+   * @param {{ startAt: string, resourceId?: string }} to
+   * @returns {true | 'missing' | 'conflict' | 'not_offered'}
    */
-  function reschedule(id, startAt) {
+  function move(id, { startAt, resourceId }) {
     const b = byId(id)
-    if (!b) return false
+    if (!b) return 'missing'
     const service = serviceById(b.serviceId)
-    if (!service) return false
+    if (!service) return 'missing'
+    const toResource = resourceId ?? b.resourceId
+    if (!service.resourceIds.includes(toResource)) return 'not_offered'
 
     const start = new Date(startAt)
     const end = addMinutes(start, service.durationMin + service.bufferMin)
-    const candidate = { ...b, startAt: start.toISOString(), endAt: end.toISOString() }
-    if (hasConflict(candidate, items.value)) return false
+    const candidate = {
+      ...b,
+      resourceId: toResource,
+      startAt: start.toISOString(),
+      endAt: end.toISOString(),
+    }
+    if (hasConflict(candidate, items.value)) return 'conflict'
 
+    const before = clone(b)
+    b.resourceId = candidate.resourceId
     b.startAt = candidate.startAt
     b.endAt = candidate.endAt
-    appendEvent(b, 'rescheduled', 'أُعيدت جدولة الحجز')
-    persist()
+    // From and to, as the API writes it — the log should say what moved.
+    const who = (rid) => resourceById(rid)?.name ?? ''
+    const changedPerson = before.resourceId !== b.resourceId
+    appendEvent(
+      b,
+      'rescheduled',
+      `أُعيدت جدولة الحجز من ${dayLabel(before.startAt)} ${time(before.startAt)}${changedPerson ? ` مع ${who(before.resourceId)}` : ''} إلى ${dayLabel(b.startAt)} ${time(b.startAt)}${changedPerson ? ` مع ${who(b.resourceId)}` : ''}`,
+    )
+    persist(b, before)
     return true
+  }
+
+  /** Same time-only move the manage page and older callers use. */
+  function reschedule(id, startAt) {
+    return move(id, { startAt }) === true
   }
 
   function addNote(id, note) {
     const b = byId(id)
     if (!b) return
+    const before = clone(b)
     b.notes = note
     appendEvent(b, 'note_added', 'أُضيفت ملاحظة')
-    persist()
+    persist(b, before)
+  }
+
+  /**
+   * Take the backend's copies of bookings it changed on its own — the guard
+   * releasing a slot, a customer confirming by reply. Updated in place so
+   * anything holding a booking keeps holding the live one.
+   * @param {import('@/types').Booking[]} changed
+   */
+  function adopt(changed) {
+    for (const next of changed) {
+      const b = byId(next.id)
+      if (!b) items.value.push(next)
+      else if (b.updatedAt !== next.updatedAt || b.status !== next.status) Object.assign(b, next)
+    }
   }
 
   /** Restore a previous snapshot — powers the undo affordance on destructive actions. */
   function restore(snapshot) {
-    const i = items.value.findIndex((b) => b.id === snapshot.id)
-    if (i === -1) return
-    items.value[i] = clone(snapshot)
-    persist()
+    const b = byId(snapshot.id)
+    if (!b) return
+    const before = clone(b)
+    Object.assign(b, clone(snapshot))
+    persist(b, before)
   }
 
   return {
@@ -294,9 +351,9 @@ export const useBookingsStore = defineStore('bookings', () => {
     setStatus,
     setPayment,
     reschedule,
+    move,
     addNote,
     restore,
+    adopt,
   }
 })
-
-export { isBefore }

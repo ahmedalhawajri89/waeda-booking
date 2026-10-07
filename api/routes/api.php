@@ -4,6 +4,8 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BookingController;
 use App\Http\Controllers\Api\CatalogController;
 use App\Http\Controllers\Api\CustomerController;
+use App\Http\Controllers\Api\GuardController;
+use App\Http\Controllers\Api\GuardPolicyController;
 use App\Http\Controllers\Api\PublicBookingController;
 use App\Http\Middleware\EnsureOperator;
 use App\Http\Middleware\ResolveOptionalUser;
@@ -44,12 +46,18 @@ Route::prefix('public')->middleware('throttle:20,1')->group(function () {
     Route::post('bookings', [PublicBookingController::class, 'store']);
     Route::get('bookings/{reference}', [PublicBookingController::class, 'show']);
     Route::post('bookings/{reference}/cancel', [PublicBookingController::class, 'cancel']);
+    Route::post('bookings/{reference}/reschedule', [PublicBookingController::class, 'reschedule']);
+    // "Tell me if a time frees up" — offered on the booking page when a day is full.
+    Route::post('waitlist', [GuardController::class, 'join']);
 });
 
 // ------------------------------------------------------------------- auth
 Route::prefix('auth')->group(function () {
     Route::post('login', [AuthController::class, 'login'])->middleware('throttle:10,1');
     Route::post('register', [AuthController::class, 'register'])->middleware('throttle:5,1');
+    // Opening a business: account, business, catalogue and hours in one go.
+    Route::post('register-business', [AuthController::class, 'registerBusiness'])->middleware('throttle:5,1');
+    Route::get('slug-available', [AuthController::class, 'slugAvailable'])->middleware('throttle:60,1');
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('me', [AuthController::class, 'me']);
@@ -74,7 +82,25 @@ Route::middleware(ResolveOptionalUser::class)->group(function () {
 // these, and no delete route anywhere: cancelling is a state, and the audit
 // trail has to survive it.
 Route::middleware(['auth:sanctum', EnsureOperator::class])->group(function () {
-    Route::put('bookings', [BookingController::class, 'bulkUpdate']);
+    // One booking per request. A bulk PUT of the whole list used to live
+    // here and created duplicates — see BookingController::store.
+    Route::post('bookings', [BookingController::class, 'store']);
+    Route::patch('bookings/{id}', [BookingController::class, 'update']);
     Route::put('customers', [CustomerController::class, 'bulkUpdate']);
     Route::put('catalog', [CatalogController::class, 'update']);
+
+    // The appointment guard's policy. Read here rather than in the public
+    // reads above: it is how this business treats risky customers, which is
+    // nobody else's business.
+    Route::get('guard/policy', [GuardPolicyController::class, 'show']);
+    Route::put('guard/policy', [GuardPolicyController::class, 'update']);
+    Route::get('guard/messages', [GuardController::class, 'messages']);
+    Route::post('guard/tick', [GuardController::class, 'tick']);
+    Route::post('guard/replies', [GuardController::class, 'reply']);
+    // The inbox: the team writing to a customer, and closing what is handled.
+    Route::post('guard/conversations/{bookingId}/messages', [GuardController::class, 'staffMessage']);
+    Route::post('guard/conversations/{bookingId}/resolve', [GuardController::class, 'resolve']);
+    Route::get('guard/waitlist', [GuardController::class, 'waitlist']);
+    Route::delete('guard/waitlist/{id}', [GuardController::class, 'removeFromWaitlist']);
+    Route::post('guard/offers/{id}/replies', [GuardController::class, 'replyToOffer']);
 });

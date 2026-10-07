@@ -4,8 +4,9 @@ import { addDays, differenceInMinutes, isSameDay, set, startOfDay } from 'date-f
 import { useBookingsStore } from '@/stores/bookings'
 import { businessHours } from '@/data/catalog'
 import { hoursFor } from '@/lib/availability'
+import { assignLanes } from '@/lib/lanes'
 import { time } from '@/lib/format'
-import { BOOKING_STATUS } from '@/lib/status'
+import { BOOKING_STATUS, TONE_BLOCK } from '@/lib/status'
 
 /**
  * Seven days side by side, sharing one hour rail.
@@ -69,17 +70,19 @@ function blocksFor(day) {
     hours: Math.floor(b.openMin / 60),
     minutes: b.openMin % 60,
   })
-  return props.bookings
-    .filter((bk) => bk.status !== 'cancelled' && isSameDay(new Date(bk.startAt), day))
-    .map((bk) => ({
-      booking: bk,
-      view: store.hydrate(bk),
-      top: Math.max(0, differenceInMinutes(new Date(bk.startAt), dayOpen)) * PX_PER_MIN,
-      height: Math.max(
-        14,
-        differenceInMinutes(new Date(bk.endAt), new Date(bk.startAt)) * PX_PER_MIN,
-      ),
-    }))
+  return assignLanes(
+    props.bookings
+      .filter((bk) => bk.status !== 'cancelled' && isSameDay(new Date(bk.startAt), day))
+      .map((bk) => ({
+        booking: bk,
+        view: store.hydrate(bk),
+        top: Math.max(0, differenceInMinutes(new Date(bk.startAt), dayOpen)) * PX_PER_MIN,
+        height: Math.max(
+          14,
+          differenceInMinutes(new Date(bk.endAt), new Date(bk.startAt)) * PX_PER_MIN,
+        ),
+      })),
+  )
 }
 
 function isClosed(day) {
@@ -87,14 +90,7 @@ function isClosed(day) {
   return !h || h.isClosed
 }
 
-const TONE = {
-  success: 'border-success-700/30 bg-success-50 text-success-700',
-  warning: 'border-warning-700/30 bg-warning-50 text-warning-700',
-  danger: 'border-danger-700/30 bg-danger-50 text-danger-700',
-  info: 'border-info-700/30 bg-info-50 text-info-700',
-  neutral: 'border-border-strong bg-surface-sunken text-fg-muted',
-  muted: 'border-border bg-surface-sunken text-fg-subtle',
-}
+const TONE = TONE_BLOCK
 
 const DAY_NAMES = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
 </script>
@@ -104,7 +100,7 @@ const DAY_NAMES = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأر
     لا ساعات عمل في هذا الأسبوع.
   </p>
 
-  <div v-else class="overflow-x-auto">
+  <div v-else class="relative overflow-x-auto">
     <div class="min-w-[46rem]">
       <!-- day headers -->
       <div class="grid" style="grid-template-columns: 3.5rem repeat(7, minmax(0, 1fr))">
@@ -118,13 +114,13 @@ const DAY_NAMES = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأر
         >
           <span
             class="block text-[11px] font-semibold"
-            :class="isSameDay(d, new Date()) ? 'text-primary-600' : 'text-fg-subtle'"
+            :class="isSameDay(d, new Date()) ? 'text-primary-fg' : 'text-fg-subtle'"
           >
             {{ DAY_NAMES[d.getDay()] }}
           </span>
           <span
             class="block text-sm font-bold"
-            :class="isSameDay(d, new Date()) ? 'text-primary-700' : 'text-fg'"
+            :class="isSameDay(d, new Date()) ? 'text-primary-fg' : 'text-fg'"
             data-numeric
           >
             {{ d.getDate() }}
@@ -173,8 +169,8 @@ const DAY_NAMES = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأر
             :style="{
               top: `${b.top}px`,
               height: `${b.height}px`,
-              insetInlineStart: '2px',
-              insetInlineEnd: '2px',
+              insetInlineStart: `calc(2px + (100% - 4px) * ${b.lane} / ${b.lanes})`,
+              width: `calc((100% - 4px) / ${b.lanes} - ${b.lanes > 1 ? 2 : 0}px)`,
             }"
             :title="`${b.view.customer?.name} · ${b.view.service?.name}`"
             @click="$emit('open', b.booking.id)"

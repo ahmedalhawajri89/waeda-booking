@@ -56,8 +56,8 @@ function onKey(e, index) {
       class="flex flex-col items-center rounded-[var(--radius-md)] border py-2 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
       :class="
         isSameDay(d, modelValue)
-          ? 'border-primary-600 bg-primary-600 text-white'
-          : 'hover:border-primary-300 hover:bg-primary-50 bg-surface border-gray-200 text-gray-700'
+          ? 'border-primary bg-primary text-white'
+          : 'hover:border-primary-line hover:bg-primary-soft bg-surface border-border text-fg-muted'
       "
       @click="emit('update:modelValue', d)"
       @keydown="onKey($event, i)"

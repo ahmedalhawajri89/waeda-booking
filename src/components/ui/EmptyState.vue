@@ -11,8 +11,8 @@ defineProps({
 })
 
 const TONE = {
-  'first-run': 'bg-primary-50 text-primary-600',
-  'no-results': 'bg-gray-100 text-gray-500',
+  'first-run': 'bg-primary-soft text-primary-fg',
+  'no-results': 'bg-surface-sunken text-fg-subtle',
   error: 'bg-danger-50 text-danger-700',
 }
 </script>
@@ -25,8 +25,8 @@ const TONE = {
     >
       <component :is="icon" class="h-6 w-6" aria-hidden="true" />
     </div>
-    <h3 class="mb-1.5 text-base font-bold text-gray-900">{{ title }}</h3>
-    <p class="max-w-sm text-sm leading-relaxed text-gray-500">{{ description }}</p>
+    <h3 class="text-fg mb-1.5 text-base font-bold">{{ title }}</h3>
+    <p class="text-fg-subtle max-w-sm text-sm leading-relaxed">{{ description }}</p>
     <div v-if="$slots.action" class="mt-5">
       <slot name="action" />
     </div>

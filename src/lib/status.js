@@ -63,3 +63,20 @@ export function nextActions(status, hasStarted) {
       return []
   }
 }
+
+/**
+ * Block colours for a booking on a calendar, from its status tone. One map,
+ * so the day view, the week view and the resource columns cannot drift apart.
+ * @type {Record<Tone, string>}
+ */
+export const TONE_BLOCK = {
+  success: 'border-success-600/30 bg-success-50 text-success-700',
+  warning: 'border-warning-600/40 bg-warning-50 text-warning-700',
+  danger: 'border-danger-600/30 bg-danger-50 text-danger-700',
+  info: 'border-border-strong bg-surface text-fg',
+  neutral: 'border-border-strong bg-surface-sunken text-fg-muted',
+  muted: 'border-border bg-canvas text-fg-faint',
+}
+
+/** @param {import('@/types').BookingStatus} status */
+export const bookingTone = (status) => TONE_BLOCK[BOOKING_STATUS[status]?.tone ?? 'neutral']

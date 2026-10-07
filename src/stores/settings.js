@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { repository } from '@/data/repository'
 import { applyCatalog, businessHours, resources, services } from '@/data/catalog'
+import { business } from '@/data/business'
 import { uid } from '@/lib/id'
 
 /**
@@ -20,10 +21,17 @@ export const useSettingsStore = defineStore('settings', () => {
   /** @returns {import('@/data/catalog').CatalogSnapshot} */
   function snapshot() {
     return {
+      business: {
+        name: business.name,
+        slug: business.slug,
+        category: business.category,
+        address: business.address,
+      },
       // icon is a component; iconKey is what persists.
       services: services.map((s) => ({
         id: s.id,
         name: s.name,
+        category: s.category ?? null,
         description: s.description,
         durationMin: s.durationMin,
         bufferMin: s.bufferMin,
@@ -77,7 +85,11 @@ export const useSettingsStore = defineStore('settings', () => {
     if (i === -1) next.services.push(row)
     else next.services[i] = row
     applyCatalog(next)
-    void repository.saveCatalog(next)
+    // Reported like every other settings save — this one used to be the only
+    // write whose failure vanished.
+    repository.saveCatalog(next).catch(() => {
+      error.value = 'تعذّر حفظ الخدمة.'
+    })
   }
 
   /** @returns {import('@/data/catalog').ServiceRow} */
@@ -89,6 +101,7 @@ export const useSettingsStore = defineStore('settings', () => {
       durationMin: 30,
       bufferMin: 10,
       priceMinor: 10000,
+      category: services[0]?.category ?? null,
       resourceIds: resources.filter((r) => r.isActive).map((r) => r.id),
       iconKey: 'Sparkles',
       isActive: true,
@@ -117,13 +130,27 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   function newResource() {
-    return { id: uid('r_'), name: '', isActive: true }
+    return { id: uid('r_'), name: '', role: '', isActive: true }
   }
 
   function toggleResource(id) {
     const r = resources.find((x) => x.id === id)
     if (!r) return
     r.isActive = !r.isActive
+    persist()
+  }
+
+  /* --------------------------------------------------------------- business */
+
+  /**
+   * Name, kind of place and address — what customers see at the top of the
+   * booking page. The slug is not editable: links already sent must keep
+   * working.
+   */
+  function saveBusiness(profile) {
+    business.name = profile.name
+    business.category = profile.category ?? ''
+    business.address = profile.address ?? ''
     persist()
   }
 
@@ -152,5 +179,6 @@ export const useSettingsStore = defineStore('settings', () => {
     newResource,
     toggleResource,
     saveHours,
+    saveBusiness,
   }
 })

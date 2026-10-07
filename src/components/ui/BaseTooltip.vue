@@ -38,6 +38,12 @@ function show() {
   }, props.delay)
 }
 
+/** Keyboard focus shows at once — no hover delay for someone tabbing through. */
+function showNow() {
+  place()
+  visible.value = true
+}
+
 function hide() {
   clearTimeout(timer)
   visible.value = false
@@ -53,10 +59,7 @@ onBeforeUnmount(() => clearTimeout(timer))
     :aria-describedby="visible ? id : undefined"
     @pointerenter="show"
     @pointerleave="hide"
-    @focusin="
-      place()
-      visible = true
-    "
+    @focusin="showNow"
     @focusout="hide"
     @keydown.escape="hide"
   >
@@ -69,7 +72,7 @@ onBeforeUnmount(() => clearTimeout(timer))
         v-if="visible"
         :id="id"
         role="tooltip"
-        class="elev-overlay pointer-events-none fixed z-[80] max-w-56 rounded-[var(--radius-sm)] bg-gray-900 px-2.5 py-1.5 text-center text-xs font-medium text-white"
+        class="elev-overlay bg-surface-inverse text-fg-inverse pointer-events-none fixed z-[80] max-w-56 rounded-[var(--radius-sm)] px-2.5 py-1.5 text-center text-xs font-medium"
         :style="{
           top: `${coords.top}px`,
           left: `${coords.left}px`,

@@ -4,13 +4,17 @@ import { ar } from 'date-fns/locale'
 /* Single source of truth for every user-visible number, date and time.
  * Nothing in the app hand-builds a display string. */
 
-const currency = new Intl.NumberFormat('ar-SA', {
+// Latin digits, matching date-fns' Arabic locale: one screen used to show
+// "١٬٩٦٠ ر.س" beside "2%" and "9:00 ص".
+export const NUMBER_LOCALE = 'ar-SA-u-nu-latn'
+
+const currency = new Intl.NumberFormat(NUMBER_LOCALE, {
   style: 'currency',
   currency: 'SAR',
   maximumFractionDigits: 0,
 })
 
-/** 15000 → "١٥٠ ر.س" (minor units in, formatted currency out). */
+/** 15000 → "150 ر.س" (minor units in, formatted currency out). */
 export function money(minor) {
   return currency.format(minor / 100)
 }
@@ -20,27 +24,27 @@ export function toDate(iso) {
   return iso instanceof Date ? iso : new Date(iso)
 }
 
-/** "١٠:٠٠ ص" */
+/** "10:00 ص" */
 export function time(iso) {
   return format(toDate(iso), 'h:mm a', { locale: ar })
 }
 
-/** "١٠:٠٠ ص – ١٠:٣٠ ص" */
+/** "10:00 ص – 10:30 ص" */
 export function timeRange(startIso, endIso) {
   return `${time(startIso)} – ${time(endIso)}`
 }
 
-/** "الأحد ٩ أغسطس" */
+/** "الأحد 9 أغسطس" */
 export function dayLabel(iso) {
   return format(toDate(iso), 'EEEE d MMMM', { locale: ar })
 }
 
-/** "الأحد ٩ أغسطس ٢٠٢٦" */
+/** "الأحد 9 أغسطس 2026" */
 export function fullDate(iso) {
   return format(toDate(iso), 'EEEE d MMMM yyyy', { locale: ar })
 }
 
-/** "اليوم" / "غداً" / "الأحد ٩ أغسطس" — for lists mixing several days. */
+/** "اليوم" / "غداً" / "الأحد 9 أغسطس" — for lists mixing several days. */
 export function relativeDay(iso) {
   const d = toDate(iso)
   if (isToday(d)) return 'اليوم'
@@ -48,19 +52,19 @@ export function relativeDay(iso) {
   return dayLabel(d)
 }
 
-/** "اليوم، ١٠:٠٠ ص" */
+/** "اليوم، 10:00 ص" */
 export function relativeDayTime(iso) {
   return `${relativeDay(iso)}، ${time(iso)}`
 }
 
-/** "قبل ٣ ساعات" / "خلال ٢٠ دقيقة" */
+/** "قبل 3 ساعات" / "خلال 20 دقيقة" */
 export function fromNow(iso) {
   const d = toDate(iso)
   const distance = formatDistanceToNowStrict(d, { locale: ar })
   return d.getTime() < Date.now() ? `قبل ${distance}` : `خلال ${distance}`
 }
 
-/** "٣٠ دقيقة" / "ساعة" / "ساعة و٣٠ دقيقة" */
+/** "30 دقيقة" / "ساعة" / "ساعة و30 دقيقة" */
 export function duration(min) {
   const h = Math.floor(min / 60)
   const m = min % 60

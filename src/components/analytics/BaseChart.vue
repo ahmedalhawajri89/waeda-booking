@@ -1,7 +1,7 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Chart } from 'chart.js'
-import { setupCharts } from '@/composables/useChartTheme'
+import { applyThemeDefaults, setupCharts } from '@/composables/useChartTheme'
 
 /**
  * Thin Chart.js wrapper.
@@ -27,6 +27,7 @@ function build() {
   if (!el.value) return
   chart?.destroy()
   setupCharts()
+  applyThemeDefaults()
   chart = new Chart(el.value, props.config)
 }
 

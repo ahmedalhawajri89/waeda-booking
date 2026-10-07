@@ -10,6 +10,8 @@ defineProps({
   items: { type: Array, required: true },
   label: { type: String, required: true },
   align: { type: String, required: false, default: 'end' },
+  /** 'top' opens upward, for triggers near the bottom of the screen. */
+  side: { type: String, required: false, default: 'bottom' },
 })
 
 const emit = defineEmits(['select'])
@@ -88,7 +90,8 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
         ref="panel"
         role="menu"
         :aria-label="label"
-        class="elev-overlay bg-surface border-border absolute top-full z-50 mt-1.5 min-w-52 rounded-[var(--radius-lg)] border p-1"
+        class="elev-overlay bg-surface border-border absolute z-50 min-w-52 rounded-[var(--radius-lg)] border p-1"
+        :class="side === 'top' ? 'bottom-full mb-1.5' : 'top-full mt-1.5'"
         :style="align === 'end' ? 'inset-inline-end: 0' : 'inset-inline-start: 0'"
         @keydown="onPanelKey"
       >

@@ -44,6 +44,10 @@ class User extends Authenticatable
             'name' => $this->name,
             'email' => $this->email,
             'role' => $this->role,
+            // The business's public booking link is /b/{orgSlug}.
+            'orgSlug' => $this->org_id
+                ? Organization::query()->whereKey($this->org_id)->value('slug')
+                : null,
         ];
     }
 }

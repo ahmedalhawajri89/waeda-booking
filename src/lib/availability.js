@@ -4,6 +4,11 @@ import { time } from './format'
 /** Statuses that occupy their slot. Cancelled and no-show release the time. */
 const BLOCKING = new Set(['pending', 'confirmed'])
 
+/** Statuses that used their time. A completed booking no longer blocks a
+ * slot, but it did fill the day — leaving it out read every past day as empty
+ * and made today's occupancy fall as appointments were closed out. */
+const OCCUPYING = new Set([...BLOCKING, 'completed'])
+
 function parseHm(base, hm) {
   const [h, m] = hm.split(':').map(Number)
   return set(startOfDay(base), { hours: h ?? 0, minutes: m ?? 0 })
@@ -114,7 +119,7 @@ export function occupancyFor(date, bookings, hours) {
   const openMin = (close.getTime() - open.getTime()) / 60000
 
   const bookedMin = bookings
-    .filter((b) => BLOCKING.has(b.status))
+    .filter((b) => OCCUPYING.has(b.status))
     .reduce((total, b) => {
       const s = new Date(b.startAt)
       const e = new Date(b.endAt)

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { startOfDay } from 'date-fns'
 import { Phone, User } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
@@ -10,9 +10,10 @@ import DateStrip from './DateStrip.vue'
 import TimeSlotGrid from './TimeSlotGrid.vue'
 import { useBookingsStore } from '@/stores/bookings'
 import { useCustomersStore } from '@/stores/customers'
-import { businessHours, resources, services } from '@/data/catalog'
+import { bookableResources, bookableServices, businessHours, services } from '@/data/catalog'
 import { generateSlots } from '@/lib/availability'
 import { money, duration } from '@/lib/format'
+import { isConflict } from '@/data/errors'
 
 /**
  * Operator create/reschedule on a single surface — no stepper. Availability
@@ -21,6 +22,8 @@ import { money, duration } from '@/lib/format'
 const props = defineProps({
   open: { type: Boolean, required: true },
   rescheduleId: { type: [String, null], required: false, default: null },
+  /** Who, when, what and for whom, ready to confirm: { resourceId, startAt, serviceId, phone, name }. */
+  prefill: { type: [Object, null], required: false, default: null },
 })
 const emit = defineEmits(['close', 'created'])
 
@@ -38,9 +41,16 @@ const notes = ref('')
 const submitting = ref(false)
 const touched = ref(false)
 
+const rescheduling = computed(() => (props.rescheduleId ? bookings.byId(props.rescheduleId) : null))
+
 const service = computed(() => services.find((s) => s.id === serviceId.value) ?? services[0])
-const allowedResources = computed(() =>
-  resources.filter((r) => service.value?.resourceIds.includes(r.id)),
+const allowedResources = computed(() => bookableResources(service.value))
+
+/** Rescheduling keeps the booking's service; creating offers what is bookable. */
+const offeredServices = computed(() =>
+  rescheduling.value
+    ? services.filter((s) => s.id === rescheduling.value.serviceId)
+    : bookableServices(),
 )
 
 /**
@@ -77,6 +87,24 @@ const slots = computed(() =>
   }),
 )
 
+/** Today, or the first day on the strip with a time still open. */
+function firstOpenDay() {
+  const today = startOfDay(new Date())
+  for (let i = 0; i < 7; i++) {
+    const day = new Date(today)
+    day.setDate(today.getDate() + i)
+    const open = generateSlots({
+      date: day,
+      service: service.value,
+      resourceId: resourceId.value,
+      bookings: bookings.items,
+      hours: businessHours,
+    }).some((s) => s.state === 'available')
+    if (open) return day
+  }
+  return today
+}
+
 const nameError = computed(() =>
   touched.value && !name.value.trim() && !matched.value ? 'الاسم مطلوب' : undefined,
 )
@@ -87,8 +115,12 @@ const phoneError = computed(() => {
   if (digits.length < 9) return 'رقم الجوال غير مكتمل'
   return undefined
 })
+// Rescheduling only moves the time — the customer fields are not shown, so
+// requiring them left the button permanently disabled.
 const canSubmit = computed(
-  () => !!startAt.value && !phoneError.value && (!!matched.value || !!name.value.trim()),
+  () =>
+    !!startAt.value &&
+    (!!rescheduling.value || (!phoneError.value && (!!matched.value || !!name.value.trim()))),
 )
 
 watch(matched, (c) => {
@@ -96,7 +128,8 @@ watch(matched, (c) => {
 })
 
 watch(service, (s) => {
-  if (s && !s.resourceIds.includes(resourceId.value)) resourceId.value = s.resourceIds[0]
+  const ids = bookableResources(s).map((r) => r.id)
+  if (s && !ids.includes(resourceId.value)) resourceId.value = ids[0] ?? s.resourceIds[0]
   startAt.value = null
 })
 watch([date, resourceId], () => {
@@ -113,7 +146,38 @@ watch(
     name.value = ''
     notes.value = ''
     paymentStatus.value = 'unpaid'
-    date.value = startOfDay(new Date())
+    const b = rescheduling.value
+    if (b) {
+      // Slots must be for this booking's own service and room, starting on its day.
+      serviceId.value = b.serviceId
+      resourceId.value = b.resourceId
+      date.value = startOfDay(new Date(b.startAt))
+    } else if (props.prefill) {
+      // A service this person actually does, then their day, then the time —
+      // in that order, because each of the first two clears the time.
+      // A prefill can also name the service and the customer — booking someone
+      // straight off the waitlist.
+      const p = props.prefill
+      if (p.serviceId && offeredServices.value.some((x) => x.id === p.serviceId))
+        serviceId.value = p.serviceId
+      const fits = (s) => !p.resourceId || bookableResources(s).some((r) => r.id === p.resourceId)
+      if (!fits(service.value))
+        serviceId.value = offeredServices.value.find(fits)?.id ?? serviceId.value
+      if (p.resourceId) resourceId.value = p.resourceId
+      if (p.phone) phone.value = p.phone
+      if (p.name) name.value = p.name
+      if (p.startAt) {
+        date.value = startOfDay(new Date(p.startAt))
+        nextTick(() => nextTick(() => (startAt.value = p.startAt)))
+      } else {
+        // "Book again" names no time: open on the first day that has one.
+        date.value = firstOpenDay()
+      }
+    } else {
+      if (!offeredServices.value.some((s) => s.id === serviceId.value))
+        serviceId.value = offeredServices.value[0]?.id ?? services[0]?.id
+      date.value = startOfDay(new Date())
+    }
   },
 )
 
@@ -122,11 +186,16 @@ async function submit() {
   if (!canSubmit.value) return
   submitting.value = true
   try {
-    const customer = customers.upsert({ name: name.value, phone: phone.value })
     if (props.rescheduleId) {
       // The grid does not offer taken slots, so this only fires if the slot
       // was claimed between the grid rendering and this submit.
-      if (!bookings.reschedule(props.rescheduleId, startAt.value)) {
+      // The resource picker is shown here, so the move has to honour it —
+      // it used to move the time and leave the person behind.
+      const moved = bookings.move(props.rescheduleId, {
+        startAt: startAt.value,
+        resourceId: resourceId.value,
+      })
+      if (moved !== true) {
         toast.error('هذا الوقت لم يعد متاحاً — اختر وقتاً آخر')
         return
       }
@@ -134,7 +203,8 @@ async function submit() {
       emit('close')
       return
     }
-    const created = bookings.create({
+    const customer = await customers.upsert({ name: name.value, phone: phone.value })
+    const created = await bookings.create({
       customerId: customer.id,
       serviceId: serviceId.value,
       resourceId: resourceId.value,
@@ -147,6 +217,14 @@ async function submit() {
     toast.success('تم إنشاء الحجز', { description: created.reference })
     emit('close')
     emit('created', created.id)
+  } catch (e) {
+    // The slot went between the grid rendering and this submit, or the
+    // backend refused it; the drawer stays open so another time can be picked.
+    toast.error(
+      isConflict(e)
+        ? 'هذا الوقت لم يعد متاحاً — اختر وقتاً آخر'
+        : 'تعذّر إنشاء الحجز. حاول مرة أخرى.',
+    )
   } finally {
     submitting.value = false
   }
@@ -169,16 +247,16 @@ const PAYMENTS = [
     <div class="space-y-5">
       <!-- service -->
       <fieldset>
-        <legend class="mb-1.5 text-[13px] font-semibold text-gray-700">الخدمة</legend>
+        <legend class="text-fg-muted mb-1.5 text-[13px] font-semibold">الخدمة</legend>
         <div class="grid gap-2">
           <label
-            v-for="s in services"
+            v-for="s in offeredServices"
             :key="s.id"
             class="flex cursor-pointer items-center gap-3 rounded-[var(--radius-md)] border px-3 py-2.5 transition-colors"
             :class="
               serviceId === s.id
-                ? 'border-primary-500 bg-primary-50'
-                : 'hover:border-primary-300 border-gray-200'
+                ? 'border-primary bg-primary-soft'
+                : 'hover:border-primary-line border-border'
             "
           >
             <input
@@ -188,12 +266,12 @@ const PAYMENTS = [
               class="sr-only"
               :disabled="!!rescheduleId"
             />
-            <component :is="s.icon" class="h-5 w-5 shrink-0 text-gray-500" aria-hidden="true" />
+            <component :is="s.icon" class="text-fg-subtle h-5 w-5 shrink-0" aria-hidden="true" />
             <span class="min-w-0 flex-1">
-              <span class="block truncate text-sm font-semibold text-gray-900">{{ s.name }}</span>
-              <span class="block text-xs text-gray-500">{{ duration(s.durationMin) }}</span>
+              <span class="text-fg block truncate text-sm font-semibold">{{ s.name }}</span>
+              <span class="text-fg-subtle block text-xs">{{ duration(s.durationMin) }}</span>
             </span>
-            <span class="shrink-0 text-sm font-bold text-gray-900" data-numeric>
+            <span class="text-fg shrink-0 text-sm font-bold" data-numeric>
               {{ money(s.priceMinor) }}
             </span>
           </label>
@@ -202,7 +280,7 @@ const PAYMENTS = [
 
       <!-- resource -->
       <fieldset v-if="allowedResources.length > 1">
-        <legend class="mb-1.5 text-[13px] font-semibold text-gray-700">المورد</legend>
+        <legend class="text-fg-muted mb-1.5 text-[13px] font-semibold">مع من؟</legend>
         <div class="flex gap-2">
           <label
             v-for="r in allowedResources"
@@ -210,8 +288,8 @@ const PAYMENTS = [
             class="flex-1 cursor-pointer rounded-[var(--radius-md)] border px-3 py-2 text-center text-sm font-semibold transition-colors"
             :class="
               resourceId === r.id
-                ? 'border-primary-500 bg-primary-50 text-primary-700'
-                : 'hover:border-primary-300 border-gray-200 text-gray-600'
+                ? 'border-primary bg-primary-soft text-primary-fg'
+                : 'hover:border-primary-line border-border text-fg-muted'
             "
           >
             <input v-model="resourceId" type="radio" :value="r.id" class="sr-only" />
@@ -222,12 +300,12 @@ const PAYMENTS = [
 
       <!-- when -->
       <div>
-        <p class="mb-1.5 text-[13px] font-semibold text-gray-700">اليوم</p>
+        <p class="text-fg-muted mb-1.5 text-[13px] font-semibold">اليوم</p>
         <DateStrip v-model="date" :days="7" />
       </div>
 
       <div>
-        <p class="mb-1.5 text-[13px] font-semibold text-gray-700">الوقت</p>
+        <p class="text-fg-muted mb-1.5 text-[13px] font-semibold">الوقت</p>
         <TimeSlotGrid
           :slots="slots"
           :model-value="startAt"
@@ -237,7 +315,7 @@ const PAYMENTS = [
 
       <!-- customer -->
       <template v-if="!rescheduleId">
-        <div class="grid gap-4 border-t border-gray-200 pt-5">
+        <div class="border-border grid gap-4 border-t pt-5">
           <BaseInput
             v-model="phone"
             label="رقم الجوال"
@@ -263,7 +341,7 @@ const PAYMENTS = [
         </div>
 
         <fieldset>
-          <legend class="mb-1.5 text-[13px] font-semibold text-gray-700">حالة الدفع</legend>
+          <legend class="text-fg-muted mb-1.5 text-[13px] font-semibold">حالة الدفع</legend>
           <div class="flex gap-2">
             <label
               v-for="p in PAYMENTS"
@@ -271,8 +349,8 @@ const PAYMENTS = [
               class="flex-1 cursor-pointer rounded-[var(--radius-md)] border px-2 py-2 text-center text-xs font-semibold transition-colors"
               :class="
                 paymentStatus === p.value
-                  ? 'border-primary-500 bg-primary-50 text-primary-700'
-                  : 'hover:border-primary-300 border-gray-200 text-gray-600'
+                  ? 'border-primary bg-primary-soft text-primary-fg'
+                  : 'hover:border-primary-line border-border text-fg-muted'
               "
             >
               <input v-model="paymentStatus" type="radio" :value="p.value" class="sr-only" />
@@ -293,9 +371,9 @@ const PAYMENTS = [
 
     <template #footer>
       <div class="flex items-center justify-between gap-3">
-        <span class="text-sm text-gray-500">
+        <span class="text-fg-subtle text-sm">
           الإجمالي
-          <strong class="text-gray-900" data-numeric>{{ money(service.priceMinor) }}</strong>
+          <strong class="text-fg" data-numeric>{{ money(service.priceMinor) }}</strong>
         </span>
         <div class="flex gap-2">
           <BaseButton variant="ghost" @click="emit('close')">إلغاء</BaseButton>

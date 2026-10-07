@@ -56,3 +56,12 @@ export function cancelBooking(reference, phone) {
     auth: false,
   })
 }
+
+/** Move your own booking; the server keeps the service and the person. */
+export function rescheduleBooking(reference, phone, startAt) {
+  return request(`/public/bookings/${encodeURIComponent(reference)}/reschedule`, {
+    method: 'POST',
+    body: { phone, startAt },
+    auth: false,
+  })
+}

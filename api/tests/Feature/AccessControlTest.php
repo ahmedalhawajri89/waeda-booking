@@ -119,7 +119,8 @@ class AccessControlTest extends TestCase
 
     public function test_a_guest_cannot_write_anything(): void
     {
-        $this->putJson('/api/bookings', ['bookings' => []])->assertUnauthorized();
+        $this->postJson('/api/bookings', [])->assertUnauthorized();
+        $this->patchJson('/api/bookings/'.Booking::first()->id, ['status' => 'cancelled'])->assertUnauthorized();
         $this->putJson('/api/customers', ['customers' => []])->assertUnauthorized();
         $this->putJson('/api/catalog', [])->assertUnauthorized();
     }
@@ -147,7 +148,11 @@ class AccessControlTest extends TestCase
         // A signed-in customer is authenticated, so the difference between 401
         // and 403 here is the difference between "log in" and "no".
         $this->actingAs($this->customerUser, 'sanctum')
-            ->putJson('/api/bookings', ['bookings' => []])
+            ->postJson('/api/bookings', [])
+            ->assertForbidden();
+
+        $this->actingAs($this->customerUser, 'sanctum')
+            ->patchJson('/api/bookings/'.Booking::first()->id, ['status' => 'cancelled'])
             ->assertForbidden();
 
         $this->actingAs($this->customerUser, 'sanctum')
@@ -225,21 +230,13 @@ class AccessControlTest extends TestCase
     {
         $booking = Booking::first();
 
-        $this->actingAs($this->operator, 'sanctum')->putJson('/api/bookings', [
-            'bookings' => [[
-                'id' => $booking->id,
-                'serviceId' => $booking->service_id,
-                'resourceId' => $booking->resource_id,
-                'customerId' => $booking->customer_id,
-                'startAt' => $booking->start_at->toIso8601String(),
-                'status' => 'completed',
-                'paymentStatus' => 'paid',
-                'channel' => 'online',
-                // A forged history. It must not survive: the events the client
-                // sends are ignored and the real ones are derived from the diff.
-                'history' => [['at' => now()->toIso8601String(), 'type' => 'created', 'summary' => 'قصة مختلقة']],
-            ]],
-        ])->assertNoContent();
+        $this->actingAs($this->operator, 'sanctum')->patchJson('/api/bookings/'.$booking->id, [
+            'status' => 'completed',
+            'paymentStatus' => 'paid',
+            // A forged history. It must not survive: the events the client
+            // sends are ignored and the real ones are derived from the diff.
+            'history' => [['at' => now()->toIso8601String(), 'type' => 'created', 'summary' => 'قصة مختلقة']],
+        ])->assertOk();
 
         $summaries = $booking->fresh()->events->pluck('summary')->all();
 

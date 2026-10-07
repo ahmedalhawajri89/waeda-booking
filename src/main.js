@@ -15,6 +15,11 @@ import '@fontsource/ibm-plex-sans-arabic/latin-400.css'
 import '@fontsource/ibm-plex-sans-arabic/latin-500.css'
 import '@fontsource/ibm-plex-sans-arabic/latin-600.css'
 import '@fontsource/ibm-plex-sans-arabic/latin-700.css'
+// Headings: Alexandria, drawn for Arabic first. Only the weights used.
+import '@fontsource/alexandria/arabic-600.css'
+import '@fontsource/alexandria/arabic-700.css'
+import '@fontsource/alexandria/latin-600.css'
+import '@fontsource/alexandria/latin-700.css'
 
 import './assets/main.css'
 import { initRepository } from './data/repository'

@@ -6,14 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\BookingEvent;
 use App\Models\Customer;
-use App\Models\Organization;
+use App\Services\BookingRules;
 use App\Services\BookingWriter;
+use Illuminate\Support\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class BookingController extends Controller
 {
-    public function __construct(private BookingWriter $writer)
+    public function __construct(private BookingWriter $writer, private BookingRules $rules)
     {
     }
 
@@ -64,7 +64,7 @@ class BookingController extends Controller
         $query = Booking::with('events')->orderBy('start_at');
 
         if ($user?->isOperator()) {
-            $query->where('org_id', $user->org_id ?? Organization::query()->value('id'));
+            $query->where('org_id', $this->orgId($request));
         } elseif ($user) {
             $query->whereIn('customer_id', Customer::where('user_id', $user->id)->select('id'));
         } else {
@@ -74,56 +74,125 @@ class BookingController extends Controller
         return response()->json($query->get()->map(fn (Booking $b) => self::toDomain($b))->all());
     }
 
+    private const FIELDS = [
+        'customerId' => 'customer_id',
+        'serviceId' => 'service_id',
+        'resourceId' => 'resource_id',
+        'startAt' => 'start_at',
+        'status' => 'status',
+        'paymentStatus' => 'payment_status',
+        'channel' => 'channel',
+        'notes' => 'notes',
+    ];
+
+    /** Request keys → writer input, keeping a present-but-null `notes`. */
+    private function toInput(array $data): array
+    {
+        $input = [];
+        foreach (self::FIELDS as $from => $to) {
+            if (array_key_exists($from, $data)) {
+                $input[$to] = $data[$from];
+            }
+        }
+
+        return $input;
+    }
+
     /**
-     * Apply the operator's whole list.
+     * Create one booking.
      *
-     * The stores speak in arrays, so this takes one — see the note in
-     * src/data/api/repository.js about why that interface survived the move.
-     * The important part is that it is a single transaction: a save that
-     * conflicts on its third booking leaves the first two unwritten too,
-     * rather than half-applying and reporting failure.
+     * Replaces a bulk PUT of the operator's whole list. That endpoint created
+     * any row whose id it did not recognise — and since the writer minted its
+     * own id, the client's id was never recognised, so every later save
+     * created the same booking again and then collided with it.
+     *
+     * Now the client sends a UUID it generated, and the row is stored under
+     * it: a retried request finds its own booking and returns it rather than
+     * booking twice.
      */
-    public function bulkUpdate(Request $request)
+    public function store(Request $request)
     {
         $data = $request->validate([
-            'bookings' => ['required', 'array'],
-            'bookings.*.id' => ['required', 'string'],
-            'bookings.*.serviceId' => ['required', 'string'],
-            'bookings.*.resourceId' => ['required', 'string'],
-            'bookings.*.customerId' => ['required', 'string'],
-            'bookings.*.startAt' => ['required', 'date'],
-            'bookings.*.status' => ['required', 'in:pending,confirmed,completed,cancelled,no_show'],
-            'bookings.*.paymentStatus' => ['required', 'in:unpaid,deposit_paid,paid,refunded'],
-            'bookings.*.channel' => ['required', 'in:online,phone,walk_in'],
-            'bookings.*.notes' => ['nullable', 'string'],
+            'id' => ['nullable', 'uuid'],
+            'customerId' => ['required', 'string'],
+            'serviceId' => ['required', 'string'],
+            'resourceId' => ['required', 'string'],
+            'startAt' => ['required', 'date'],
+            'status' => ['sometimes', 'in:pending,confirmed,completed,cancelled,no_show'],
+            'paymentStatus' => ['sometimes', 'in:unpaid,deposit_paid,paid,refunded'],
+            'channel' => ['sometimes', 'in:online,phone,walk_in'],
+            'notes' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $org = $request->user()->org_id ?? Organization::query()->value('id');
-        $actorId = $request->user()->id;
+        $org = $this->orgId($request);
 
-        DB::transaction(function () use ($data, $org, $actorId) {
-            foreach ($data['bookings'] as $row) {
-                $input = [
-                    'org_id' => $org,
-                    'customer_id' => $row['customerId'],
-                    'service_id' => $row['serviceId'],
-                    'resource_id' => $row['resourceId'],
-                    'start_at' => $row['startAt'],
-                    'status' => $row['status'],
-                    'payment_status' => $row['paymentStatus'],
-                    'channel' => $row['channel'],
-                    'notes' => $row['notes'] ?? null,
-                ];
-
-                $existing = Booking::find($row['id']);
-                if ($existing) {
-                    $this->writer->update($existing, $input, $actorId);
-                } else {
-                    $this->writer->create($input, $actorId);
-                }
+        if (! empty($data['id'])) {
+            $existing = Booking::with('events')->find($data['id']);
+            if ($existing) {
+                // Ours: the retry of a request that already succeeded. Someone
+                // else's: an id we must not reveal or overwrite.
+                return $existing->org_id === $org
+                    ? response()->json(self::toDomain($existing))
+                    : response()->json(['error' => 'id_taken'], 409);
             }
-        });
+        }
 
-        return response()->noContent();
+        Customer::where('org_id', $org)->findOrFail($data['customerId']);
+        $service = $this->rules->service($org, $data['serviceId'], $data['resourceId']);
+        $this->rules->resourceIsActive($org, $data['resourceId']);
+        $start = Carbon::parse($data['startAt']);
+        // No past-time rule here, unlike the public form: an operator records
+        // walk-ins and phone bookings after the fact.
+        $this->rules->withinHours($org, $start, $start->copy()->addMinutes($service->occupiedMinutes()));
+
+        $booking = $this->writer->create(
+            ['org_id' => $org, 'id' => $data['id'] ?? null] + $this->toInput($data),
+            $request->user()->id,
+        );
+
+        return response()->json(self::toDomain($booking), 201);
+    }
+
+    /** Change one booking: any subset of its fields. */
+    public function update(Request $request, string $id)
+    {
+        $data = $request->validate([
+            'customerId' => ['sometimes', 'string'],
+            'serviceId' => ['sometimes', 'string'],
+            'resourceId' => ['sometimes', 'string'],
+            'startAt' => ['sometimes', 'date'],
+            'status' => ['sometimes', 'in:pending,confirmed,completed,cancelled,no_show'],
+            'paymentStatus' => ['sometimes', 'in:unpaid,deposit_paid,paid,refunded'],
+            'channel' => ['sometimes', 'in:online,phone,walk_in'],
+            'notes' => ['sometimes', 'nullable', 'string', 'max:2000'],
+        ]);
+
+        $org = $this->orgId($request);
+        // Scoped by org: a booking id from another organization is a 404, not
+        // a row this operator can edit.
+        $booking = Booking::where('org_id', $org)->findOrFail($id);
+
+        if (isset($data['customerId'])) {
+            Customer::where('org_id', $org)->findOrFail($data['customerId']);
+        }
+
+        // Moving a booking, or changing what it is, has to land somewhere the
+        // service can actually run, inside opening hours.
+        $serviceId = $data['serviceId'] ?? $booking->service_id;
+        $resourceId = $data['resourceId'] ?? $booking->resource_id;
+        $start = isset($data['startAt']) ? Carbon::parse($data['startAt']) : $booking->start_at;
+        $relocating = $serviceId !== $booking->service_id
+            || $resourceId !== $booking->resource_id
+            || ! $start->equalTo($booking->start_at);
+        if ($relocating) {
+            // A service switched off since booking can still be moved; only a
+            // new choice of service has to be one that is on offer.
+            $service = $this->rules->service($org, $serviceId, $resourceId, $serviceId !== $booking->service_id);
+            $this->rules->withinHours($org, $start, $start->copy()->addMinutes($service->occupiedMinutes()));
+        }
+
+        $saved = $this->writer->update($booking, $this->toInput($data), $request->user()->id);
+
+        return response()->json(self::toDomain($saved));
     }
 }

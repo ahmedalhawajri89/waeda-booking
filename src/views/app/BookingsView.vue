@@ -5,7 +5,7 @@ import { isSameDay, isWithinInterval, startOfDay, addDays, format } from 'date-f
 import { ArrowDown, ArrowUp, CalendarPlus, Download, SearchX } from 'lucide-vue-next'
 import { useBookingsStore } from '@/stores/bookings'
 import { useCustomersStore } from '@/stores/customers'
-import { services, serviceById } from '@/data/catalog'
+import { resources, services, serviceById } from '@/data/catalog'
 import { BOOKING_STATUS, PAYMENT_STATUS } from '@/lib/status'
 import { downloadCsv } from '@/lib/export'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -14,6 +14,10 @@ import SkeletonBlock from '@/components/ui/SkeletonBlock.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BookingRow from '@/components/booking/BookingRow.vue'
+import BookingsTable from '@/components/booking/BookingsTable.vue'
+import { toast } from 'vue-sonner'
+import { clone } from '@/lib/clone'
+import SearchInput from '@/components/ui/SearchInput.vue'
 
 const emit = defineEmits(['openBooking'])
 
@@ -22,9 +26,11 @@ const store = useBookingsStore()
 const customers = useCustomersStore()
 
 const query = ref('')
-const quick = ref('all')
+// What a desk opens this list for is what is coming, not last July.
+const quick = ref('upcoming')
 const status = ref('all')
 const serviceId = ref('all')
+const resourceId = ref('all')
 const sortKey = ref('time')
 const sortDesc = ref(false)
 const page = ref(1)
@@ -33,6 +39,7 @@ const page = ref(1)
 const PAGE_SIZE = 50
 
 const QUICK = [
+  { value: 'upcoming', label: 'القادمة' },
   { value: 'all', label: 'الكل' },
   { value: 'today', label: 'اليوم' },
   { value: 'week', label: 'هذا الأسبوع' },
@@ -63,13 +70,16 @@ watch(
 
 // Any change to what is being shown resets the page, or you end up looking at
 // an empty page 4 of a 12-result list.
-watch([query, quick, status, serviceId, sortKey, sortDesc], () => (page.value = 1))
+watch([query, quick, status, serviceId, resourceId, sortKey, sortDesc], () => (page.value = 1))
 
 const attentionIds = computed(() => new Set(store.attention.map((a) => a.booking.id)))
 
 function matchesQuick(b) {
   const start = new Date(b.startAt)
   switch (quick.value) {
+    case 'upcoming':
+      // A search looks everywhere: the booking you are hunting for may be past.
+      return query.value.trim() !== '' || start >= startOfDay(new Date())
     case 'today':
       return isSameDay(start, new Date())
     case 'week':
@@ -106,7 +116,8 @@ const filtered = computed(() =>
       matchesQuick(b) &&
       matchesQuery(b) &&
       (status.value === 'all' || b.status === status.value) &&
-      (serviceId.value === 'all' || b.serviceId === serviceId.value),
+      (serviceId.value === 'all' || b.serviceId === serviceId.value) &&
+      (resourceId.value === 'all' || b.resourceId === resourceId.value),
   ),
 )
 
@@ -137,6 +148,12 @@ const results = computed(() => {
       case 'price':
         d = a.priceMinor - b.priceMinor
         break
+      case 'resource':
+        d = (store.hydrate(a).resource?.name ?? '').localeCompare(
+          store.hydrate(b).resource?.name ?? '',
+          'ar',
+        )
+        break
       default:
         d = a.startAt.localeCompare(b.startAt)
     }
@@ -154,16 +171,27 @@ const paged = computed(() =>
 const hasFilters = computed(
   () =>
     query.value.trim() !== '' ||
-    quick.value !== 'all' ||
+    quick.value !== 'upcoming' ||
     status.value !== 'all' ||
-    serviceId.value !== 'all',
+    serviceId.value !== 'all' ||
+    resourceId.value !== 'all',
 )
 
 function clearAll() {
   query.value = ''
-  quick.value = 'all'
+  quick.value = 'upcoming'
   status.value = 'all'
   serviceId.value = 'all'
+  resourceId.value = 'all'
+}
+
+/** A row's one-click next step, with the way back. */
+function quickAction({ id, status: next }) {
+  const before = store.byId(id) ? clone(store.byId(id)) : null
+  store.setStatus(id, next)
+  toast.success(next === 'confirmed' ? 'تم التأكيد' : 'سُجّل الحضور', {
+    action: { label: 'تراجع', onClick: () => before && store.restore(before) },
+  })
 }
 
 function toggleSort(key) {
@@ -195,9 +223,12 @@ function exportCsv() {
 </script>
 
 <template>
-  <div class="mx-auto max-w-7xl p-4 lg:p-6">
+  <div class="w-full p-4 lg:p-6 2xl:px-8">
     <header class="mb-4 flex flex-wrap items-center justify-between gap-3">
-      <h1 class="type-h3 text-fg">الحجوزات</h1>
+      <div>
+        <h1 class="type-h3 text-fg">الحجوزات</h1>
+        <p class="text-fg-subtle text-sm">كل المواعيد، القادمة والسابقة، مع البحث والتصفية.</p>
+      </div>
       <div class="flex items-center gap-3">
         <p class="text-fg-subtle text-sm">
           <span data-numeric>{{ results.length }}</span> من
@@ -211,6 +242,11 @@ function exportCsv() {
 
     <!-- filters -->
     <div class="mb-4 space-y-3">
+      <SearchInput
+        v-model="query"
+        class="max-w-md"
+        placeholder="ابحث بالاسم أو الجوال أو رقم الحجز"
+      />
       <div class="flex flex-wrap gap-1.5" role="group" aria-label="مرشّحات سريعة">
         <button
           v-for="f in QUICK"
@@ -220,8 +256,8 @@ function exportCsv() {
           class="rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
           :class="
             quick === f.value
-              ? 'border-primary-600 bg-primary-600 text-white'
-              : 'hover:border-primary-300 hover:text-primary-700 border-border bg-surface text-fg-muted'
+              ? 'border-fg bg-fg text-fg-inverse'
+              : 'hover:border-primary-line hover:text-primary-fg border-border bg-surface text-fg-muted'
           "
           @click="quick = f.value"
         >
@@ -250,10 +286,21 @@ function exportCsv() {
             ...services.map((s) => ({ value: s.id, label: s.name })),
           ]"
         />
+        <BaseSelect
+          v-if="resources.length > 1"
+          v-model="resourceId"
+          label="مع"
+          hide-label
+          size="sm"
+          :options="[
+            { value: 'all', label: 'كل الفريق' },
+            ...resources.map((r) => ({ value: r.id, label: r.name })),
+          ]"
+        />
 
         <!-- Sort as buttons rather than table headers: below `sm` the rows are
              cards with no header row to click. -->
-        <div class="flex items-center gap-1" role="group" aria-label="الترتيب">
+        <div class="flex items-center gap-1 md:hidden" role="group" aria-label="الترتيب">
           <span class="text-fg-subtle me-1 text-xs font-semibold">ترتيب:</span>
           <button
             v-for="s in SORTS"
@@ -263,8 +310,8 @@ function exportCsv() {
             class="inline-flex h-9 items-center gap-1 rounded-[var(--radius-md)] border px-2.5 text-xs font-semibold transition-colors"
             :class="
               sortKey === s.value
-                ? 'border-primary-300 bg-primary-50 text-primary-700'
-                : 'border-border bg-surface text-fg-muted hover:border-primary-300'
+                ? 'border-primary-line bg-primary-soft text-primary-fg'
+                : 'border-border bg-surface text-fg-muted hover:border-primary-line'
             "
             @click="toggleSort(s.value)"
           >
@@ -293,7 +340,7 @@ function exportCsv() {
     </div>
 
     <!-- results -->
-    <div class="surface overflow-hidden">
+    <div class="surface">
       <ErrorState v-if="store.error" :message="store.error" @retry="store.load(true)" />
 
       <div v-else-if="store.isLoading && !store.loaded" class="p-4">
@@ -316,15 +363,27 @@ function exportCsv() {
         description="ابدأ بإنشاء أول حجز — اضغط N أو استخدم زر «حجز جديد» في الأعلى."
       />
 
-      <div v-else role="list">
-        <BookingRow
-          v-for="b in paged"
-          :key="b.id"
-          :booking="b"
-          show-day
-          @open="emit('openBooking', $event)"
-        />
-      </div>
+      <template v-else>
+        <div class="hidden md:block">
+          <BookingsTable
+            :rows="paged"
+            :sort-key="sortKey"
+            :sort-desc="sortDesc"
+            @open="emit('openBooking', $event)"
+            @sort="toggleSort"
+            @quick="quickAction"
+          />
+        </div>
+        <div role="list" class="md:hidden">
+          <BookingRow
+            v-for="b in paged"
+            :key="b.id"
+            :booking="b"
+            show-day
+            @open="emit('openBooking', $event)"
+          />
+        </div>
+      </template>
     </div>
 
     <nav

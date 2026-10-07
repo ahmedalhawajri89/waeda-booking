@@ -75,7 +75,7 @@ const SIZE = {
             ? 'bg-surface text-fg elev-raised rounded-[var(--radius-sm)]'
             : 'text-fg-subtle hover:text-fg rounded-[var(--radius-sm)]'
           : item.value === modelValue
-            ? 'border-primary-600 text-primary-700 -mb-px border-b-2'
+            ? 'border-primary text-primary-fg -mb-px border-b-2'
             : 'text-fg-subtle hover:text-fg -mb-px border-b-2 border-transparent',
       ]"
       @click="emit('update:modelValue', item.value)"

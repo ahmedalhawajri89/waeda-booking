@@ -6,6 +6,7 @@ import {
   dailySeries,
   demandHeatmap,
   topServices,
+  byResource,
 } from '../analytics'
 
 /**
@@ -184,5 +185,27 @@ describe('topServices', () => {
       range,
     )
     expect(rows.map((r) => r.serviceId)).toEqual(['s2', 's1'])
+  })
+})
+
+describe('byResource', () => {
+  it('totals each person, ignores cancellations, and rates no-shows on decided bookings', () => {
+    const rows = byResource(
+      [
+        booking({ resourceId: 'r1', priceMinor: 10000 }),
+        booking({ resourceId: 'r1', priceMinor: 10000, status: 'no_show' }),
+        booking({ resourceId: 'r1', priceMinor: 99999, status: 'cancelled' }),
+        booking({ resourceId: 'r2', priceMinor: 30000, status: 'confirmed' }),
+      ],
+      range,
+    )
+    expect(rows.map((r) => r.resourceId)).toEqual(['r2', 'r1'])
+    const r1 = rows.find((r) => r.resourceId === 'r1')
+    expect(r1.count).toBe(2)
+    expect(r1.revenueMinor).toBe(20000)
+    expect(r1.noShowRate).toBe(0.5)
+    expect(r1.bookedMin).toBe(80)
+    // Nothing decided yet: no rate rather than a divide-by-zero.
+    expect(rows.find((r) => r.resourceId === 'r2').noShowRate).toBe(0)
   })
 })

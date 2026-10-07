@@ -220,3 +220,49 @@ export function topServices(bookings, range) {
   }
   return [...m.values()].sort((a, b) => b.revenueMinor - a.revenueMinor)
 }
+
+/**
+ * @typedef {object} ResourceTotals
+ * @property {string} resourceId
+ * @property {number} count       Bookings that were not cancelled.
+ * @property {number} revenueMinor
+ * @property {number} completed
+ * @property {number} noShow
+ * @property {number} noShowRate  Of the bookings that were decided (completed or no-show).
+ * @property {number} bookedMin   Minutes on the calendar, buffer excluded.
+ */
+
+/**
+ * How each person on the team did over the range — the question an owner
+ * with more than one chair asks first.
+ *
+ * @param {import('@/types').Booking[]} bookings
+ * @param {DateRange} range
+ * @returns {ResourceTotals[]}
+ */
+export function byResource(bookings, range) {
+  const m = new Map()
+  for (const b of inRange(bookings, range)) {
+    if (b.status === 'cancelled') continue
+    const row = m.get(b.resourceId) ?? {
+      resourceId: b.resourceId,
+      count: 0,
+      revenueMinor: 0,
+      completed: 0,
+      noShow: 0,
+      noShowRate: 0,
+      bookedMin: 0,
+    }
+    row.count += 1
+    row.revenueMinor += b.priceMinor
+    if (b.status === 'completed') row.completed += 1
+    if (b.status === 'no_show') row.noShow += 1
+    row.bookedMin += Math.max(0, (new Date(b.endAt) - new Date(b.startAt)) / 60000)
+    m.set(b.resourceId, row)
+  }
+  for (const row of m.values()) {
+    const decided = row.completed + row.noShow
+    row.noShowRate = decided ? row.noShow / decided : 0
+  }
+  return [...m.values()].sort((a, b) => b.revenueMinor - a.revenueMinor)
+}

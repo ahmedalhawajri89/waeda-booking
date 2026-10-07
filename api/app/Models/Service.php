@@ -10,7 +10,7 @@ class Service extends Model
     use HasUuids;
 
     protected $fillable = [
-        'id', 'org_id', 'name', 'description', 'duration_min',
+        'id', 'org_id', 'name', 'category', 'description', 'duration_min',
         'buffer_min', 'price_minor', 'icon_key', 'is_active', 'sort_order',
     ];
 

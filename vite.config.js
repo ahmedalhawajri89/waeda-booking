@@ -16,4 +16,8 @@ export default defineConfig({
     // (main.js on top-level await, the availability spec on `.at()`) rely on it.
     target: 'es2020',
   },
+  test: {
+    // The API's vendor tree ships other packages' JS specs; they are not ours.
+    exclude: ['**/node_modules/**', 'api/**'],
+  },
 })

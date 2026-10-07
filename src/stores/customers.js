@@ -1,7 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { repository } from '@/data/repository'
-import { uid } from '@/lib/id'
 
 /** Digits only, so "٠٥٠ ١٢٣ ٤٥٦٧", "050-123-4567" and "0501234567" all match. */
 function normalisePhone(phone) {
@@ -26,12 +25,6 @@ export const useCustomersStore = defineStore('customers', () => {
     } finally {
       isLoading.value = false
     }
-  }
-
-  function persist() {
-    repository.saveCustomers(items.value).catch(() => {
-      error.value = 'تعذّر حفظ التغييرات.'
-    })
   }
 
   function byId(id) {
@@ -59,22 +52,30 @@ export const useCustomersStore = defineStore('customers', () => {
 
   /**
    * Returns the existing customer when the phone already exists — never duplicates.
+   *
+   * Awaits the save for a new customer: a booking written for them must not
+   * reach the API before they do, or it is refused for an unknown customer.
    * @param {{ name: string, phone: string, email?: string }} input
-   * @returns {import('@/types').Customer}
+   * @returns {Promise<import('@/types').Customer>}
    */
-  function upsert(input) {
+  async function upsert(input) {
     const existing = byPhone(input.phone)
     if (existing) return existing
 
     const customer = {
-      id: uid('c_'),
+      id: crypto.randomUUID(),
       name: input.name.trim(),
       phone: input.phone.trim(),
       email: input.email?.trim() || undefined,
       createdAt: new Date().toISOString(),
     }
     items.value.push(customer)
-    persist()
+    try {
+      await repository.saveCustomers(items.value)
+    } catch (e) {
+      items.value = items.value.filter((c) => c.id !== customer.id)
+      throw e
+    }
     return customer
   }
 

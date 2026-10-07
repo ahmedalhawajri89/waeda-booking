@@ -1,5 +1,6 @@
 import { reactive } from 'vue'
 import { iconFor } from '@/lib/icons'
+import { applyBusiness } from './business'
 
 /**
  * The business's own configuration: what it sells, on what, and when.
@@ -26,43 +27,52 @@ import { iconFor } from '@/lib/icons'
  * @property {import('@/types').BusinessHours[]} businessHours
  */
 
+/**
+ * The demo business is one coherent place — a skin and beauty clinic — so the
+ * guest page reads like a real storefront: specialists with names and roles,
+ * services grouped the way the clinic sells them. Ids stay stable; the tests
+ * and the seeded bookings refer to s1–s3 and r1–r2.
+ */
 export const DEFAULT_RESOURCES = [
-  { id: 'r1', name: 'غرفة ١', isActive: true },
-  { id: 'r2', name: 'غرفة ٢', isActive: true },
+  { id: 'r1', name: 'د. سارة العتيبي', role: 'أخصائية جلدية وتجميل', isActive: true },
+  { id: 'r2', name: 'د. خالد المطيري', role: 'استشاري جلدية وليزر', isActive: true },
 ]
 
 export const DEFAULT_SERVICES = [
   {
     id: 's1',
-    name: 'استشارة طبية متخصصة',
-    description: 'جلسة استشارية شاملة مع طبيب مختص لمناقشة حالتك.',
+    name: 'استشارة جلدية',
+    category: 'الاستشارات',
+    description: 'فحص البشرة ومناقشة حالتك ووضع خطة علاج مناسبة.',
     durationMin: 30,
     bufferMin: 10,
     priceMinor: 15000,
     resourceIds: ['r1', 'r2'],
-    iconKey: 'HeartPulse',
+    iconKey: 'Stethoscope',
     isActive: true,
   },
   {
     id: 's2',
-    name: 'قص شعر وتصفيف VIP',
-    description: 'تصفيف وقص شعر بأحدث القصات مع عناية خاصة بالفروة.',
+    name: 'تنظيف بشرة عميق',
+    category: 'العناية بالبشرة',
+    description: 'تنظيف وتقشير وترطيب، مناسب لكل أنواع البشرة.',
     durationMin: 45,
     bufferMin: 15,
-    priceMinor: 8000,
+    priceMinor: 22000,
     resourceIds: ['r1'],
-    iconKey: 'Scissors',
+    iconKey: 'Sparkles',
     isActive: true,
   },
   {
     id: 's3',
-    name: 'حجز طاولة عشاء',
-    description: 'حجز طاولة في القسم الهادئ مع إطلالة بانورامية وتجهيزات خاصة.',
+    name: 'جلسة ليزر',
+    category: 'الليزر',
+    description: 'جلسة إزالة شعر بالليزر لمنطقة كاملة، بأجهزة معتمدة.',
     durationMin: 120,
     bufferMin: 30,
-    priceMinor: 20000,
+    priceMinor: 45000,
     resourceIds: ['r2'],
-    iconKey: 'Coffee',
+    iconKey: 'HeartPulse',
     isActive: true,
   },
 ]
@@ -93,6 +103,7 @@ export const businessHours = reactive(structuredClone(DEFAULT_HOURS))
 /** Replaces contents in place, so importers keep their reference.
  * @param {CatalogSnapshot} snapshot */
 export function applyCatalog(snapshot) {
+  applyBusiness(snapshot.business)
   services.splice(0, services.length, ...snapshot.services.map(toService))
   resources.splice(0, resources.length, ...snapshot.resources)
   businessHours.splice(0, businessHours.length, ...snapshot.businessHours)
@@ -104,4 +115,16 @@ export function serviceById(id) {
 
 export function resourceById(id) {
   return resources.find((r) => r.id === id) ?? null
+}
+
+/** Active resources a service can run on. @param {{ resourceIds: string[] } | null} service */
+export function bookableResources(service) {
+  if (!service) return []
+  return resources.filter((r) => r.isActive && service.resourceIds.includes(r.id))
+}
+
+/** What can be booked right now: active, with somewhere active to run.
+ *  A deactivated service used to stay on offer in both booking forms. */
+export function bookableServices() {
+  return services.filter((s) => s.isActive && bookableResources(s).length > 0)
 }

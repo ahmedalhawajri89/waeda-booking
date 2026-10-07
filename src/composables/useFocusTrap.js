@@ -68,7 +68,10 @@ export function useFocusTrap(open, panel, onEscape) {
       document.body.style.overflow = 'hidden'
       document.addEventListener('keydown', onKeydown)
       await nextTick()
-      panel.value?.querySelector(FOCUSABLE)?.focus()
+      // A surface can name where focus lands; otherwise the first stop.
+      ;(
+        panel.value?.querySelector('[data-autofocus]') ?? panel.value?.querySelector(FOCUSABLE)
+      )?.focus()
     } else {
       release()
       lastFocused?.focus()

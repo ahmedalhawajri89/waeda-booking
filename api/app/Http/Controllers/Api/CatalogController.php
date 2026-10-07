@@ -20,32 +20,38 @@ use Illuminate\Support\Facades\DB;
  */
 class CatalogController extends Controller
 {
-    private function orgId(Request $request): string
-    {
-        return $request->user()?->org_id ?? Organization::query()->value('id');
-    }
-
     public function show(Request $request)
     {
-        $org = $this->orgId($request);
+        // A guest page names its business; the console reads its own.
+        $org = $request->hasHeader('X-Org') || $request->query('org')
+            ? $this->publicOrgId($request)
+            : $this->orgId($request);
+        $business = Organization::query()->whereKey($org)->first();
 
         // `services_public_read` exposed only active rows to anon: a service
         // the operator switched off should not be discoverable. Settings needs
         // the inactive ones to switch them back on, so an operator sees all.
-        $onlyActive = ! $request->user()?->isOperator();
+        $onlyActive = ! ($request->user()?->isOperator() && $request->user()->org_id === $org);
 
         $services = Service::with('resources:id')->where('org_id', $org)
             ->when($onlyActive, fn ($q) => $q->where('is_active', true))
-            ->orderBy('sort_order')->get();
+            ->orderBy('sort_order')->orderBy('name')->orderBy('id')->get();
         $resources = Resource::where('org_id', $org)
             ->when($onlyActive, fn ($q) => $q->where('is_active', true))
-            ->orderBy('sort_order')->get();
+            ->orderBy('sort_order')->orderBy('name')->orderBy('id')->get();
         $hours = BusinessHour::where('org_id', $org)->orderBy('weekday')->get();
 
         return response()->json([
+            'business' => [
+                'name' => $business?->name ?? '',
+                'slug' => $business?->slug ?? '',
+                'category' => $business?->category ?? '',
+                'address' => $business?->address ?? '',
+            ],
             'services' => $services->map(fn (Service $s) => [
                 'id' => $s->id,
                 'name' => $s->name,
+                'category' => $s->category,
                 'description' => $s->description ?? '',
                 'durationMin' => $s->duration_min,
                 'bufferMin' => $s->buffer_min,
@@ -57,6 +63,7 @@ class CatalogController extends Controller
             'resources' => $resources->map(fn (Resource $r) => [
                 'id' => $r->id,
                 'name' => $r->name,
+                'role' => $r->role,
                 'isActive' => $r->is_active,
             ])->all(),
             'businessHours' => $hours->map(fn (BusinessHour $h) => [
@@ -75,6 +82,7 @@ class CatalogController extends Controller
             'services' => ['array'],
             'services.*.id' => ['required', 'string'],
             'services.*.name' => ['required', 'string', 'max:255'],
+            'services.*.category' => ['nullable', 'string', 'max:64'],
             'services.*.description' => ['nullable', 'string'],
             'services.*.durationMin' => ['required', 'integer', 'min:1'],
             'services.*.bufferMin' => ['required', 'integer', 'min:0'],
@@ -85,6 +93,11 @@ class CatalogController extends Controller
             'resources' => ['array'],
             'resources.*.id' => ['required', 'string'],
             'resources.*.name' => ['required', 'string', 'max:255'],
+            'resources.*.role' => ['nullable', 'string', 'max:120'],
+            'business' => ['array'],
+            'business.name' => ['sometimes', 'required', 'string', 'min:2', 'max:255'],
+            'business.category' => ['nullable', 'string', 'max:64'],
+            'business.address' => ['nullable', 'string', 'max:255'],
             'resources.*.isActive' => ['required', 'boolean'],
             'businessHours' => ['array'],
             'businessHours.*.weekday' => ['required', 'integer', 'between:0,6'],
@@ -99,19 +112,34 @@ class CatalogController extends Controller
         // services pointing at resources that were not written — is worse than
         // a rejected save, because nothing tells anyone it happened.
         DB::transaction(function () use ($data, $org) {
+            // The profile, never the slug: links already shared must keep working.
+            if (! empty($data['business'])) {
+                Organization::query()->whereKey($org)->update(array_filter([
+                    'name' => $data['business']['name'] ?? null,
+                    'category' => $data['business']['category'] ?? null,
+                    'address' => $data['business']['address'] ?? null,
+                ], fn ($v) => $v !== null));
+            }
+
             foreach ($data['resources'] ?? [] as $i => $r) {
+                $this->assertNotForeign(Resource::class, $r['id'], $org);
                 Resource::updateOrCreate(
                     ['id' => $r['id']],
-                    ['org_id' => $org, 'name' => $r['name'], 'is_active' => $r['isActive'], 'sort_order' => $i]
+                    ['org_id' => $org, 'name' => $r['name'], 'role' => $r['role'] ?? null, 'is_active' => $r['isActive'], 'sort_order' => $i]
                 );
             }
 
             foreach ($data['services'] ?? [] as $i => $s) {
+                $this->assertNotForeign(Service::class, $s['id'], $org);
+                // Only this organization's resources can be linked to its services.
+                $s['resourceIds'] = Resource::where('org_id', $org)
+                    ->whereIn('id', $s['resourceIds'] ?? [])->pluck('id')->all();
                 $service = Service::updateOrCreate(
                     ['id' => $s['id']],
                     [
                         'org_id' => $org,
                         'name' => $s['name'],
+                        'category' => $s['category'] ?? null,
                         'description' => $s['description'] ?? '',
                         'duration_min' => $s['durationMin'],
                         'buffer_min' => $s['bufferMin'],

@@ -46,40 +46,80 @@ await go('/', 'guest-home')
 await go('/book', 'guest-book-1')
 
 // walk the guest wizard end to end
-await page.getByRole('button', { name: /استشارة طبية/ }).click()
-await page.getByRole('button', { name: 'التالي' }).click()
+// one page: service → nearest time → details → code → done
+await page.getByRole('radio', { name: /استشارة جلدية/ }).click()
+// A day ahead, so the booking is still outside the two-hour change cutoff
+// when the manage page is exercised below — "nearest" could be minutes away.
+for (const id of ['#day-1', '#day-2', '#day-3']) {
+  if (await page.locator(`${id}:not([disabled])`).count()) {
+    await page.locator(id).click()
+    break
+  }
+}
+await page.waitForTimeout(300)
+await page
+  .locator('[role="radiogroup"][aria-label^="أوقات"] [role="radio"]:not([disabled])')
+  .first()
+  .click()
 await page.waitForTimeout(500)
 await page.screenshot({ path: `${OUT}/guest-book-2.png` })
-
-const slot = page.getByRole('radio').filter({ hasNotText: /^$/ })
-const available = page.locator('[role="radio"]:not([disabled])').last()
-await available.click()
-await page.getByRole('button', { name: 'التالي' }).click()
-await page.waitForTimeout(400)
 await page.getByLabel(/الاسم الكامل/).fill('اختبار تلقائي')
 await page.getByLabel(/رقم الجوال/).fill('0501112222')
 await page.screenshot({ path: `${OUT}/guest-book-3.png` })
-await page.getByRole('button', { name: 'تأكيد الحجز' }).click()
+await page.getByRole('button', { name: 'تأكيد الحجز' }).first().click()
+await page.waitForTimeout(500)
+// The demo shows the WhatsApp code in a toast; a returning device skips this.
+if (await page.getByText('أدخل رمز التحقق').count()) {
+  const toastText = await page.locator('[data-sonner-toast]').last().innerText()
+  await page.keyboard.type(toastText.match(/\d{4}/)?.[0] ?? '')
+}
 await page.waitForTimeout(900)
 await page.screenshot({ path: `${OUT}/guest-confirmed.png` })
-const ref = await page.locator('[data-numeric]').first().innerText()
+const ref = await page.locator('[dir="ltr"][data-numeric]').first().innerText()
 console.log('✓ guest booking created:', ref.trim())
 
 // --- my booking lookup --------------------------------------------------
-await go(`/booking/${ref.trim()}`, 'my-booking-verify')
-await page.getByLabel(/رقم الجوال/).fill('0501112222')
-await page.getByRole('button', { name: 'عرض الحجز' }).click()
-await page.waitForTimeout(600)
-await page.screenshot({ path: `${OUT}/my-booking.png` })
+// This device just booked, so it is recognised and the phone is not asked.
+await go(`/booking/${ref.trim()}`, 'my-booking')
 console.log(
   (await page.getByText('بانتظار التأكيد').count()) > 0
-    ? '✓ lookup shows the real booking'
-    : '✗ lookup failed',
+    ? '✓ manage page opens straight onto the booking'
+    : '✗ manage page did not recognise the device',
 )
+
+// move it to the first free time
+await page.getByRole('button', { name: 'تعديل الموعد' }).click()
+await page.waitForTimeout(500)
+await page
+  .locator('#move [role="radiogroup"][aria-label^="أوقات"] [role="radio"]:not([disabled])')
+  .first()
+  .click()
+await page.getByRole('button', { name: 'تأكيد الموعد الجديد' }).click()
+await page.waitForTimeout(600)
+await page.screenshot({ path: `${OUT}/my-booking-moved.png` })
+console.log(
+  (await page.getByText(/نُقل موعدك/).count()) > 0
+    ? '✓ booking rescheduled'
+    : '✗ reschedule failed',
+)
+
+// Forget this device: now the phone has to be proven, and the wrong one is
+// refused. (Same browser, because the demo's bookings live in its storage.)
+await page.evaluate(() => localStorage.removeItem('bookingpro:guest:v1'))
+await page.reload({ waitUntil: 'networkidle' })
+await page.getByLabel(/رقم الجوال/).fill('0509999999')
+await page.getByRole('button', { name: 'عرض الحجز' }).click()
+await page.waitForTimeout(500)
+const refused = (await page.getByText('بانتظار التأكيد').count()) === 0
+await page.getByLabel(/رقم الجوال/).fill('0501112222')
+await page.getByRole('button', { name: 'عرض الحجز' }).click()
+await page.waitForTimeout(500)
+const shown = (await page.getByText('بانتظار التأكيد').count()) > 0
+console.log(refused && shown ? '✓ lookup needs the right phone' : '✗ phone check broken')
 
 // --- sign in ------------------------------------------------------------
 await go('/login', 'login')
-await page.getByRole('button', { name: 'دخول' }).click()
+await page.getByRole('button', { name: /ادخل بالحساب التجريبي/ }).click()
 await page.waitForTimeout(1200)
 await page.screenshot({ path: `${OUT}/app-today.png` })
 console.log(page.url().endsWith('/app') ? '✓ signed in → /app' : `✗ landed on ${page.url()}`)
@@ -114,6 +154,23 @@ console.log(
     ? '✓ confirm action works — status is now مؤكد'
     : '✗ confirm failed',
 )
+// reschedule it: the drawer used to keep its submit button disabled forever
+await drawer.getByRole('button', { name: /إعادة جدولة/ }).click()
+await page.waitForTimeout(600)
+const form = page.getByRole('dialog').last()
+await form
+  .locator('[role="radio"]:not([disabled])')
+  .filter({ hasText: /\d:\d\d/ })
+  .last()
+  .click()
+await form.getByRole('button', { name: 'تأكيد الموعد الجديد' }).click()
+await page.waitForTimeout(800)
+await page.screenshot({ path: `${OUT}/app-rescheduled.png` })
+console.log(
+  (await page.getByText(/أُعيدت جدولة الحجز من/).count()) > 0
+    ? '✓ reschedule works — the log records from and to'
+    : '✗ reschedule failed',
+)
 await page.keyboard.press('Escape')
 await page.waitForTimeout(400)
 
@@ -123,6 +180,17 @@ await go('/app/calendar', 'app-calendar', 1000)
 await go('/app/customers', 'app-customers', 900)
 await go('/app/settings', 'app-settings', 800)
 
+// the appointment guard: learned risk, explained, on its own screen
+await go('/app/guard', 'app-guard', 1200)
+console.log(
+  (await page.getByText(/يحتاج متابعتك/).count()) > 0 &&
+    (await page.getByText(/لماذا يغيب عملاؤك/).count()) > 0 &&
+    (await page.getByRole('heading', { name: /حارس المواعيد/ }).count()) > 0
+    ? '✓ guard scores this week and explains why'
+    : '✗ guard screen missing risk badges',
+)
+await go('/app/settings?tab=guard', 'app-settings-guard', 800)
+
 // create drawer via keyboard shortcut
 await page.goto(BASE + '/app', { waitUntil: 'networkidle' })
 await page.waitForTimeout(700)
@@ -130,8 +198,150 @@ await page.keyboard.press('n')
 await page.waitForTimeout(700)
 await page.screenshot({ path: `${OUT}/app-create-drawer.png` })
 console.log(
-  (await page.getByRole('dialog').count()) > 0 ? '✓ "n" opens the create drawer' : '✗ shortcut failed',
+  (await page.getByRole('dialog').count()) > 0
+    ? '✓ "n" opens the create drawer'
+    : '✗ shortcut failed',
 )
+
+// --- the console's own tools ------------------------------------------
+await page.keyboard.press('Escape')
+await page.goto(BASE + '/app', { waitUntil: 'networkidle' })
+await page.waitForTimeout(600)
+console.log(
+  (await page.getByText(/waeda\.app\/b\//).count()) > 0
+    ? '✓ the rail shows the business booking link'
+    : '✗ booking link card missing',
+)
+
+// the bell opens in place, and a booking that needs a decision opens its drawer
+{
+  await page.locator('[data-bell]').click()
+  await page.waitForTimeout(400)
+  const panel = page.getByRole('dialog', { name: 'الإشعارات' })
+  const inPlace = new URL(page.url()).pathname === '/app' && (await panel.count()) > 0
+  const item = panel.locator('section').first().getByRole('button').filter({ hasNotText: /^ردّ/ })
+  let opens = true
+  if (await item.count()) {
+    await item.first().click()
+    await page.waitForTimeout(700)
+    opens = !!new URL(page.url()).searchParams.get('booking')
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(300)
+  }
+  console.log(
+    inPlace && opens
+      ? '✓ the bell opens a panel in place, and its items open where they are handled'
+      : '✗ bell navigated away or its item went nowhere',
+  )
+}
+
+// the guard opens on the tab the link names
+await go('/app/guard?tab=conversations', 'app-guard-conversations', 900)
+console.log(
+  (await page.getByRole('tab', { name: /المحادثات/, selected: true }).count()) > 0
+    ? '✓ guard opens on the conversations tab'
+    : '✗ guard tab from the URL ignored',
+)
+
+// the inbox: a customer message the guard cannot read reaches the team, and
+// answering it closes the hand-off
+{
+  const needs = async () =>
+    Number((await page.getByRole('tab', { name: /تحتاجك/ }).innerText()).replace(/\D/g, '') || 0)
+  await page.getByRole('tab', { name: /الكل/ }).click()
+  await page.waitForTimeout(300)
+  await page.getByRole('radio', { name: /كأنك العميل/ }).click()
+  await page.getByRole('textbox', { name: /رد العميل التجريبي/ }).fill('ممكن أجي مع أختي؟')
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(900)
+  const waiting = await needs()
+  await page.getByRole('tab', { name: /تحتاجك/ }).click()
+  await page.waitForTimeout(300)
+  await page.getByRole('radio', { name: /رد الفريق/ }).click()
+  await page.getByRole('button', { name: 'التأخير مقبول' }).click()
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(900)
+  await page.screenshot({ path: `${OUT}/app-guard-inbox.png` })
+  console.log(
+    waiting > 0 && (await needs()) === waiting - 1
+      ? '✓ inbox: hand-off reaches the team, and a reply closes it'
+      : '✗ inbox hand-off / reply',
+  )
+}
+
+// calendar: a click on empty time starts a booking with that person at that time
+await go('/app/calendar?view=day', 'app-calendar-day', 900)
+{
+  const cols = page.locator('.cursor-copy')
+  let opened = false
+  for (let c = 0; c < (await cols.count()) && !opened; c++) {
+    const box = await cols.nth(c).boundingBox()
+    for (let y = box.y + 20; y < Math.min(box.y + box.height, 880) && !opened; y += 40) {
+      const x = box.x + box.width / 2
+      const free = await page.evaluate(
+        ([px, py]) => !document.elementFromPoint(px, py)?.closest('[data-block]'),
+        [x, y],
+      )
+      if (!free) continue
+      await page.mouse.click(x, y)
+      await page.waitForTimeout(600)
+      opened = (await page.getByRole('dialog').count()) > 0
+    }
+  }
+  await page.screenshot({ path: `${OUT}/app-calendar-click-create.png` })
+  console.log(opened ? '✓ empty slot opens a prefilled booking' : '✗ click-to-create failed')
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(400)
+}
+
+// calendar: dragging a booking moves it (or is refused on a clash, with a reason)
+{
+  const blk = page.locator('[data-block].cursor-grab').first()
+  if (await blk.count()) {
+    const box = await blk.boundingBox()
+    await page.mouse.move(box.x + box.width / 2, box.y + 8)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width / 2, box.y + 60, { steps: 6 })
+    await page.mouse.move(box.x + box.width / 2, box.y + 90, { steps: 6 })
+    await page.mouse.up()
+    await page.waitForTimeout(500)
+    const said = await page
+      .locator('[data-sonner-toast]')
+      .last()
+      .innerText()
+      .catch(() => '')
+    await page.screenshot({ path: `${OUT}/app-calendar-drag.png` })
+    console.log(
+      /نُقل|محجوز/.test(said)
+        ? `✓ drag moves a booking — «${said.split('\n')[0]}»`
+        : '✗ drag did nothing',
+    )
+  } else console.log('· no movable booking on the calendar today, drag not exercised')
+}
+
+// settings → booking page: the business name an owner saves is what guests see
+await go('/app/settings?tab=business', 'app-settings-business', 700)
+{
+  const name = page.getByRole('textbox', { name: /^اسم المنشأة/ })
+  const before = await name.inputValue()
+  await name.fill('مركز الريحان للتجربة')
+  await page.getByRole('button', { name: 'حفظ', exact: true }).click()
+  await page.waitForTimeout(500)
+  await page.goto(BASE + '/book', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(600)
+  const shown = (await page.getByText('مركز الريحان للتجربة').count()) > 0
+  console.log(
+    shown
+      ? '✓ business name saved in settings shows on the booking page'
+      : '✗ business name did not reach the booking page',
+  )
+  // put it back
+  await page.goto(BASE + '/app/settings?tab=business', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(500)
+  await page.getByRole('textbox', { name: /^اسم المنشأة/ }).fill(before)
+  await page.getByRole('button', { name: 'حفظ', exact: true }).click()
+  await page.waitForTimeout(400)
+}
 
 // --- responsive ---------------------------------------------------------
 for (const [w, h, tag] of [
@@ -149,5 +359,7 @@ for (const [w, h, tag] of [
   console.log('✓ responsive', tag, `${w}×${h}`)
 }
 
-console.log('\n' + (errors.length ? 'CONSOLE ERRORS:\n' + errors.join('\n') : '✓ zero console errors'))
+console.log(
+  '\n' + (errors.length ? 'CONSOLE ERRORS:\n' + errors.join('\n') : '✓ zero console errors'),
+)
 await browser.close()

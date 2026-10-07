@@ -9,7 +9,7 @@ class Organization extends Model
 {
     use HasUuids;
 
-    protected $fillable = ['name', 'slug', 'timezone', 'currency'];
+    protected $fillable = ['name', 'slug', 'category', 'address', 'timezone', 'currency'];
 
     public function services()
     {

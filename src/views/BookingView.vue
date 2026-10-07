@@ -1,99 +1,129 @@
-﻿<script setup>
-import { computed, onMounted, ref, watch } from 'vue'
-import { format, startOfDay } from 'date-fns'
-import { ArrowLeft, ArrowRight, Check, Copy, Phone, User } from 'lucide-vue-next'
+<script setup>
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { addDays, format, isSameDay, startOfDay } from 'date-fns'
+import { ar } from 'date-fns/locale'
+import {
+  ArrowRight,
+  CalendarPlus,
+  Check,
+  Clock,
+  MessageCircle,
+  Phone,
+  ShieldCheck,
+  User,
+  Zap,
+} from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
-import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
-import DateStrip from '@/components/booking/DateStrip.vue'
-import TimeSlotGrid from '@/components/booking/TimeSlotGrid.vue'
-import AppLogo from '@/components/ui/AppLogo.vue'
+import DayPicker from '@/components/booking/DayPicker.vue'
+import CodeInput from '@/components/booking/CodeInput.vue'
+import WaitlistJoin from '@/components/booking/WaitlistJoin.vue'
+import StoreHeader from '@/components/booking/StoreHeader.vue'
+import BookingTicket from '@/components/booking/BookingTicket.vue'
 import { useBookingsStore } from '@/stores/bookings'
 import { useCustomersStore } from '@/stores/customers'
 import { useSettingsStore } from '@/stores/settings'
-import { businessHours, services } from '@/data/catalog'
+import { bookableResources, bookableServices, services } from '@/data/catalog'
+import { business, initialOf } from '@/data/business'
+import { isConflict } from '@/data/errors'
 import { isDemoBackend } from '@/data/repository'
-import { generateSlots } from '@/lib/availability'
+import { useGuestBusiness } from '@/composables/useGuestBusiness'
+import { groupByPeriod, useGuestAvailability } from '@/composables/useGuestAvailability'
 import { duration, fullDate, money, time } from '@/lib/format'
+import { buildIcs, downloadIcs } from '@/lib/ics'
+import { forgetGuest, rememberGuest, rememberedGuest, samePhone } from '@/lib/guestIdentity'
 
 /**
- * Guest booking flow. Unlike the previous build this produces a real booking,
- * captures the fields it asks for, survives a refresh, and hands the customer a
- * reference they can look up later.
+ * The guest booking page: one page, no account.
+ *
+ * Everything the customer chooses is on screen at once and fills in from the
+ * top — service, who, when, then their details — with a summary that stays in
+ * view (beside the form on a desktop, as a bar along the bottom on a phone).
+ *
+ * Identity is the phone number. The first time a phone is used it is proven
+ * with a four-digit code; after that this device remembers the customer and
+ * the next booking skips straight to confirming. Nobody makes a password.
+ *
+ * A refresh keeps progress (the draft), and the confirmation hands over the
+ * reference, a calendar file, a WhatsApp share and the link to manage it.
  */
 const bookings = useBookingsStore()
 const customers = useCustomersStore()
 const settings = useSettingsStore()
+const { slug, managePath } = useGuestBusiness()
 
 const DRAFT_KEY = 'bookingpro:draft:v1'
+const ANY = 'any'
 
-const step = ref(1)
+/* ------------------------------------------------------------------ state */
 const serviceId = ref(null)
+const who = ref(ANY)
 const date = ref(startOfDay(new Date()))
 const startAt = ref(null)
 const name = ref('')
 const phone = ref('')
 const notes = ref('')
 const touched = ref(false)
+
+/** 'form' → 'verify' (first time on this phone) → 'done' */
+const stage = ref('form')
 const submitting = ref(false)
 const reference = ref(null)
+const booked = ref(null)
 
+const returning = ref(rememberedGuest())
+
+const offered = computed(() => bookableServices())
 const service = computed(() => services.find((s) => s.id === serviceId.value) ?? null)
+const people = computed(() => bookableResources(service.value))
 
-/** Guests book the first resource that can deliver the service. */
-const resourceId = computed(() => service.value?.resourceIds[0] ?? null)
+/** Services the way the business sells them: by category, then by name. */
+const categories = computed(() => [...new Set(offered.value.map((s) => s.category ?? 'الخدمات'))])
+const catFilter = ref('all')
+const serviceGroups = computed(() =>
+  categories.value
+    .filter((c) => catFilter.value === 'all' || c === catFilter.value)
+    .map((c) => ({ name: c, items: offered.value.filter((s) => (s.category ?? 'الخدمات') === c) })),
+)
+const providersOf = (s) => bookableResources(s)
 
-/**
- * What is already taken on the chosen resource.
- *
- * On the demo backend every booking is in the browser, so the store has them.
- * Against the API a guest cannot read /bookings — that endpoint carries who
- * booked what — so the wizard asks the availability endpoint instead, which
- * answers with two timestamps per busy interval and nothing else.
- *
- * The shape below is what generateSlots() expects. A busy interval is not a
- * booking and has no id, so it is given one that cannot collide with a real
- * one: nothing here is ever written back, it only has to mark time as taken.
- */
-const busy = ref([])
-
-const blocking = computed(() =>
-  isDemoBackend
-    ? bookings.items
-    : busy.value.map((b, i) => ({
-        id: `busy-${i}`,
-        resourceId: resourceId.value,
-        status: 'confirmed',
-        startAt: b.startAt,
-        endAt: b.endAt,
-      })),
+/** The resources a slot may be taken on: the chosen one, or all of them. */
+const candidates = computed(() =>
+  who.value === ANY ? people.value : people.value.filter((r) => r.id === who.value),
 )
 
-async function loadBusy() {
-  if (isDemoBackend || !resourceId.value) return
-  try {
-    const { busyRanges } = await import('@/data/api/public')
-    const day = format(date.value, 'yyyy-MM-dd')
-    busy.value = await busyRanges(resourceId.value, day, day)
-  } catch {
-    // Falling back to "nothing is taken" is the safe direction: the wizard
-    // over-offers, and the server still refuses a slot that has gone. The
-    // opposite — treating the day as full — would hide real availability.
-    busy.value = []
-  }
+/* --------------------------------------------------------- availability */
+const avail = useGuestAvailability()
+const query = computed(() => ({ service: service.value, resources: candidates.value }))
+const slots = computed(() => avail.slotsOn(date.value, query.value))
+const freeCount = (day) => avail.freeCount(day, query.value)
+const loadBusy = () => avail.loadBusy(people.value)
+const grouped = computed(() => groupByPeriod(slots.value))
+const dayIsFull = computed(
+  () => slots.value.length > 0 && !slots.value.some((s) => s.state === 'available'),
+)
+
+const chosenSlot = computed(() => slots.value.find((s) => s.startAt === startAt.value) ?? null)
+const resourceId = computed(() =>
+  who.value !== ANY ? who.value : (chosenSlot.value?.resourceId ?? null),
+)
+const resourceName = computed(
+  () => people.value.find((r) => r.id === resourceId.value)?.name ?? null,
+)
+
+/** The soonest free time from now, for the customer who only wants "soon". */
+const nearest = computed(() => avail.nearest(query.value))
+
+function takeNearest() {
+  if (!nearest.value) return
+  date.value = nearest.value.day
+  nextTick(() => {
+    startAt.value = nearest.value?.slot.startAt ?? null
+    scrollTo('details')
+  })
 }
 
-const slots = computed(() => {
-  if (!service.value || !resourceId.value) return []
-  return generateSlots({
-    date: date.value,
-    service: service.value,
-    resourceId: resourceId.value,
-    bookings: blocking.value,
-    hours: businessHours,
-  })
-})
-
+/* ------------------------------------------------------------- details */
 const phoneError = computed(() => {
   if (!touched.value) return undefined
   const digits = phone.value.replace(/\D/g, '')
@@ -103,25 +133,41 @@ const phoneError = computed(() => {
 })
 const nameError = computed(() => (touched.value && !name.value.trim() ? 'الاسم مطلوب' : undefined))
 
-const canContinue = computed(() => {
-  if (step.value === 1) return serviceId.value !== null
-  if (step.value === 2) return startAt.value !== null
-  return !nameError.value && !phoneError.value && !!name.value.trim() && !!phone.value.trim()
+const done = computed(() => ({
+  service: !!service.value,
+  when: !!startAt.value && !!resourceId.value,
+  details: !!name.value.trim() && phone.value.replace(/\D/g, '').length >= 9,
+}))
+const ready = computed(() => done.value.service && done.value.when && done.value.details)
+
+/** What the one button on the page should do next. */
+const nextAction = computed(() => {
+  if (!done.value.service) return { label: 'اختر الخدمة', target: 'service' }
+  if (!done.value.when) return { label: 'اختر الموعد', target: 'when' }
+  if (!done.value.details) return { label: 'أكمل بياناتك', target: 'details' }
+  return { label: 'تأكيد الحجز', target: null }
 })
 
-/* --- draft: a refresh or an accidental back must not destroy progress --- */
+function scrollTo(id) {
+  document.getElementById(`sec-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function notMe() {
+  forgetGuest()
+  returning.value = null
+  name.value = ''
+  phone.value = ''
+}
+
+/* ------------------------------------------------------------- draft */
 function saveDraft() {
-  // Step 4 is the confirmation, and the booking behind it is already made.
-  // Saving there re-created the draft that submit() had just cleared, so
-  // coming back to /book dropped the visitor into step 3 of a booking they
-  // had already completed.
-  if (step.value > 3) return
+  if (stage.value === 'done') return
   try {
     localStorage.setItem(
       DRAFT_KEY,
       JSON.stringify({
-        step: step.value,
         serviceId: serviceId.value,
+        who: who.value,
         date: date.value.toISOString(),
         startAt: startAt.value,
         name: name.value,
@@ -134,73 +180,110 @@ function saveDraft() {
   }
 }
 
+// A new service, person or day voids the chosen time — but not while a draft
+// is being restored, when all of them arrive together and belong together.
+let restoring = false
+watch([serviceId, who, date], () => {
+  if (!restoring) startAt.value = null
+})
+watch(serviceId, async () => {
+  if (!restoring) who.value = ANY
+  await loadBusy()
+  // Land on a day that has something to offer rather than an empty today.
+  if (!restoring && !slots.value.some((x) => x.state === 'available') && nearest.value)
+    date.value = nearest.value.day
+})
+watch([serviceId, who, date, startAt, name, phone, notes], saveDraft)
+
 onMounted(async () => {
-  // The guest wizard offers slots computed from services and opening hours,
-  // so the catalog has to be current before the first grid renders. The
-  // booking and customer stores are only loaded on the demo backend, where
-  // they are the source of what is taken; against the API a guest gets empty
-  // lists from both by design, and asks the availability endpoint instead.
-  await settings.load()
+  await settings.load(!isDemoBackend && !!slug.value)
   if (isDemoBackend) await Promise.all([bookings.load(), customers.load()])
+
+  if (returning.value) {
+    name.value = returning.value.name
+    phone.value = returning.value.phone
+  }
+
   try {
     const raw = localStorage.getItem(DRAFT_KEY)
-    if (!raw) return
-    const d = JSON.parse(raw)
-    if (d.serviceId && services.some((s) => s.id === d.serviceId)) {
+    const d = raw ? JSON.parse(raw) : null
+    if (d?.serviceId && offered.value.some((s) => s.id === d.serviceId)) {
+      restoring = true
       serviceId.value = d.serviceId
+      who.value = d.who ?? ANY
       date.value = new Date(d.date)
-      startAt.value = d.startAt
-      name.value = d.name ?? ''
-      phone.value = d.phone ?? ''
+      startAt.value = d.startAt ?? null
+      name.value = d.name || name.value
+      phone.value = d.phone || phone.value
       notes.value = d.notes ?? ''
-      step.value = Math.min(d.step ?? 1, 3)
-      if (step.value > 1) toast.info('استأنفنا حجزك من حيث توقفت')
+      if (d.startAt) toast.info('استأنفنا حجزك من حيث توقفت')
+      await nextTick()
+      restoring = false
     }
   } catch {
-    /* ignore malformed drafts */
+    restoring = false
   }
+  if (!serviceId.value && offered.value.length === 1) serviceId.value = offered.value[0].id
 })
 
-watch([step, serviceId, date, startAt, name, phone, notes], saveDraft)
-watch([serviceId, date], () => {
-  startAt.value = null
-})
-
-// The busy list is per resource and per day, so it is refetched whenever
-// either changes — including on the first render, once a service is chosen.
-watch([resourceId, date], loadBusy, { immediate: true })
-
-function goNext() {
-  touched.value = true
-  if (!canContinue.value) return
-  touched.value = false
-  step.value += 1
-  window.scrollTo({ top: 0, behavior: 'smooth' })
-}
-
-function goBack() {
-  step.value -= 1
-  window.scrollTo({ top: 0, behavior: 'smooth' })
-}
-
+/* ------------------------------------------------------- verify + book */
 /**
- * Two paths, because a guest is not an operator.
- *
- * On the demo backend everything is local, so the store writes the booking
- * directly. Against the API it cannot: creating a booking there means writing
- * the customer and the booking together, and an anonymous visitor has no
- * business doing either through the operator endpoints. The public endpoint
- * exists for exactly this, and computes the price, the end time and the
- * reference itself — the four facts below are all the caller is trusted for.
+ * The code that would be sent on WhatsApp. Until the channel is connected
+ * there is nothing to send it with, so the demo shows it on screen instead
+ * and says so — the flow the customer goes through is the real one.
  */
-async function submit() {
+const sentCode = ref('')
+const codeError = ref(false)
+const codeBox = ref(null)
+const resendIn = ref(0)
+let resendTimer
+
+function sendCode() {
+  sentCode.value = String(Math.floor(1000 + Math.random() * 9000))
+  codeError.value = false
+  resendIn.value = 30
+  clearInterval(resendTimer)
+  resendTimer = setInterval(() => {
+    resendIn.value -= 1
+    if (resendIn.value <= 0) clearInterval(resendTimer)
+  }, 1000)
+  toast(`واتساب · ${business.name}`, {
+    description: `رمز التحقق: ${sentCode.value}`,
+    duration: 8000,
+  })
+}
+
+async function confirm() {
   touched.value = true
-  if (!canContinue.value || !serviceId.value || !resourceId.value || !startAt.value) return
+  if (!ready.value) {
+    if (nextAction.value.target) scrollTo(nextAction.value.target)
+    return
+  }
+  const known = returning.value && samePhone(returning.value.phone, phone.value)
+  if (known) return book()
+  stage.value = 'verify'
+  sendCode()
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+function onCode(code) {
+  if (code !== sentCode.value) {
+    codeError.value = true
+    codeBox.value?.clear()
+    return
+  }
+  rememberGuest(name.value.trim(), phone.value.trim())
+  returning.value = rememberedGuest()
+  book()
+}
+
+async function book() {
+  if (!serviceId.value || !resourceId.value || !startAt.value) return
   submitting.value = true
   try {
     if (isDemoBackend) {
-      const customer = customers.upsert({ name: name.value, phone: phone.value })
-      const created = bookings.create({
+      const customer = await customers.upsert({ name: name.value, phone: phone.value })
+      const created = await bookings.create({
         customerId: customer.id,
         serviceId: serviceId.value,
         resourceId: resourceId.value,
@@ -211,7 +294,10 @@ async function submit() {
         notes: notes.value.trim() || undefined,
       })
       reference.value = created.reference
+      booked.value = { startAt: created.startAt, endAt: created.endAt }
     } else {
+      // The public endpoint computes price, end time and reference itself;
+      // these facts are all a guest is trusted to supply.
       const { bookPublic } = await import('@/data/api/public')
       const created = await bookPublic({
         serviceId: serviceId.value,
@@ -222,177 +308,462 @@ async function submit() {
         notes: notes.value.trim() || undefined,
       })
       reference.value = created.reference
+      booked.value = { startAt: created.startAt ?? startAt.value, endAt: created.endAt ?? null }
     }
+    rememberGuest(name.value.trim(), phone.value.trim())
     localStorage.removeItem(DRAFT_KEY)
-    step.value = 4
+    stage.value = 'done'
+    window.scrollTo({ top: 0 })
   } catch (e) {
-    // The slot went while the wizard was open, or the server refused the
-    // time. Either way the booking did not happen and saying so beats
-    // advancing to a confirmation screen with no booking behind it.
+    stage.value = 'form'
     toast.error(
-      e?.status === 409
-        ? 'هذا الوقت لم يعد متاحاً — اختر وقتاً آخر'
+      e?.status === 409 || isConflict(e)
+        ? 'هذا الوقت حُجز قبل لحظات. اختر وقتاً آخر.'
         : 'تعذّر إتمام الحجز. حاول مرة أخرى.',
     )
+    if (e?.status === 409 || isConflict(e)) {
+      startAt.value = null
+      loadBusy()
+      nextTick(() => scrollTo('when'))
+    }
   } finally {
     submitting.value = false
   }
 }
 
-async function copyReference() {
-  if (!reference.value) return
-  try {
-    await navigator.clipboard.writeText(reference.value)
-    toast.success('نُسخ رقم الحجز')
-  } catch {
-    toast.error('تعذّر النسخ — انسخ الرقم يدوياً')
-  }
+/* -------------------------------------------------------- after booking */
+const manageUrl = computed(() =>
+  reference.value ? `${window.location.origin}${managePath(reference.value)}` : '',
+)
+
+function addToCalendar() {
+  if (!booked.value || !service.value) return
+  const start = booked.value.startAt
+  const end =
+    booked.value.endAt ??
+    new Date(new Date(start).getTime() + service.value.durationMin * 60000).toISOString()
+  downloadIcs(
+    `${reference.value}.ics`,
+    buildIcs({
+      uid: `${reference.value}@waeda.app`,
+      title: `${service.value.name} · ${business.name}`,
+      start,
+      end,
+      location: business.address,
+      description: `رقم الحجز ${reference.value}\n${manageUrl.value}`,
+    }),
+  )
 }
 
-const STEPS = ['الخدمة', 'الموعد', 'بياناتك']
+const shareUrl = computed(() => {
+  if (!booked.value || !service.value) return '#'
+  const msg = `حجزت موعداً في ${business.name}\n${service.value.name}\n${fullDate(booked.value.startAt)} الساعة ${time(booked.value.startAt)}\nرقم الحجز: ${reference.value}\n${manageUrl.value}`
+  return `https://wa.me/?text=${encodeURIComponent(msg)}`
+})
+
+const dayTitle = computed(() =>
+  isSameDay(date.value, new Date())
+    ? 'اليوم'
+    : isSameDay(date.value, addDays(new Date(), 1))
+      ? 'غداً'
+      : format(date.value, 'EEEE d MMMM', { locale: ar }),
+)
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50">
-    <header class="bg-surface/95 sticky top-0 z-20 border-b border-gray-200 backdrop-blur">
-      <div class="mx-auto flex h-16 max-w-3xl items-center justify-between px-4">
-        <AppLogo compact />
-        <RouterLink to="/" class="text-sm font-semibold text-gray-500 hover:text-gray-900">
-          إلغاء
-        </RouterLink>
-      </div>
-    </header>
+  <div class="bg-canvas min-h-screen pb-28 lg:pb-0">
+    <StoreHeader />
 
-    <!-- confirmation -->
-    <main v-if="step === 4" class="mx-auto max-w-md px-4 py-14">
-      <div class="surface animate-pop-in p-7 text-center">
-        <div
-          class="bg-success-50 text-success-700 mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full"
+    <!-- ================================================= done -->
+    <main v-if="stage === 'done'" class="mx-auto max-w-lg px-4 py-10 sm:py-14">
+      <div class="animate-pop-in text-center">
+        <span
+          class="bg-success-600 mx-auto mb-5 grid h-16 w-16 place-items-center rounded-full text-white"
         >
-          <Check class="h-8 w-8" aria-hidden="true" />
-        </div>
-        <h1 class="mb-2 text-xl font-bold text-gray-900">وصلنا طلبك</h1>
-        <p class="mb-6 text-sm leading-relaxed text-gray-600">
-          سنؤكد موعدك ونتواصل معك على
-          <span dir="ltr" class="font-semibold text-gray-900">{{ phone }}</span>
-          قبل
-          <strong class="text-gray-900">{{ startAt ? fullDate(startAt) : '' }}</strong>
-          الساعة <strong class="text-gray-900">{{ startAt ? time(startAt) : '' }}</strong
-          >.
+          <Check class="h-8 w-8" stroke-width="3" aria-hidden="true" />
+        </span>
+        <h2 class="font-display text-fg mb-2 text-2xl font-bold">تم حجز موعدك</h2>
+        <p class="text-fg-muted mb-8 text-[15px]">
+          ستصلك رسالة على الواتساب قبل الموعد بيوم لتأكيد حضورك.
         </p>
-
-        <div
-          class="border-primary-300 bg-primary-50 mb-6 rounded-[var(--radius-lg)] border border-dashed p-4"
-        >
-          <p class="text-primary-700 text-xs font-semibold">رقم الحجز — احفظه للمتابعة</p>
-          <p class="mt-1 text-lg font-bold text-gray-900" dir="ltr" data-numeric>{{ reference }}</p>
-          <BaseButton size="sm" :icon="Copy" class="mt-3" @click="copyReference"
-            >نسخ الرقم</BaseButton
-          >
-        </div>
-
-        <div class="flex justify-center gap-2">
-          <BaseButton @click="$router.push('/')">الصفحة الرئيسية</BaseButton>
-          <BaseButton variant="primary" @click="$router.push(`/booking/${reference}`)">
-            متابعة حجزي
-          </BaseButton>
-        </div>
       </div>
+
+      <BookingTicket
+        v-if="booked && service"
+        :service-name="service.name"
+        :resource-name="resourceName"
+        :start-at="booked.startAt"
+        :reference="reference"
+        :price-minor="service.priceMinor"
+      />
+
+      <div class="mt-5 grid gap-2.5 sm:grid-cols-2">
+        <button
+          type="button"
+          class="border-border bg-surface text-fg hover:bg-surface-hover flex items-center justify-center gap-2 rounded-[var(--radius-md)] border py-3 text-sm font-bold"
+          @click="addToCalendar"
+        >
+          <CalendarPlus class="h-4 w-4" aria-hidden="true" /> أضف إلى تقويمك
+        </button>
+        <a
+          :href="shareUrl"
+          target="_blank"
+          rel="noopener"
+          class="border-border bg-surface text-fg hover:bg-surface-hover flex items-center justify-center gap-2 rounded-[var(--radius-md)] border py-3 text-sm font-bold"
+        >
+          <MessageCircle class="h-4 w-4" aria-hidden="true" /> شارك على واتساب
+        </a>
+      </div>
+      <RouterLink
+        :to="managePath(reference)"
+        class="btn-brand mt-2.5 flex items-center justify-center rounded-[var(--radius-md)] py-3 text-sm font-bold"
+      >
+        إدارة الحجز
+      </RouterLink>
+      <p class="text-fg-subtle mt-4 text-center text-[13px]">
+        تقدر تعدّل الموعد أو تلغيه من رابط إدارة الحجز، دون أن تتصل.
+      </p>
     </main>
 
-    <!-- wizard -->
-    <main v-else class="mx-auto max-w-3xl px-4 py-6">
-      <!-- progress -->
-      <ol class="mb-6 flex items-center gap-2" aria-label="خطوات الحجز">
-        <li v-for="(label, i) in STEPS" :key="label" class="flex flex-1 items-center gap-2">
-          <span
-            class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold"
-            :class="
-              step > i + 1
-                ? 'bg-primary-600 text-white'
-                : step === i + 1
-                  ? 'border-primary-600 text-primary-700 border-2'
-                  : 'bg-gray-100 text-gray-400'
-            "
-            :aria-current="step === i + 1 ? 'step' : undefined"
-          >
-            <Check v-if="step > i + 1" class="h-3.5 w-3.5" />
-            <template v-else>{{ i + 1 }}</template>
-          </span>
-          <span
-            class="hidden text-xs font-semibold sm:block"
-            :class="step >= i + 1 ? 'text-gray-900' : 'text-gray-400'"
-          >
-            {{ label }}
-          </span>
-          <span v-if="i < STEPS.length - 1" class="h-px flex-1 bg-gray-200" aria-hidden="true" />
-        </li>
-      </ol>
+    <!-- ================================================= verify -->
+    <main v-else-if="stage === 'verify'" class="mx-auto max-w-md px-4 py-10 sm:py-14">
+      <button
+        type="button"
+        class="text-fg-subtle hover:text-fg mb-6 flex items-center gap-1.5 text-sm font-medium"
+        @click="stage = 'form'"
+      >
+        <ArrowRight class="h-4 w-4 ltr:rotate-180" aria-hidden="true" /> رجوع
+      </button>
+      <div
+        class="border-border bg-surface rounded-[var(--radius-xl)] border p-6 text-center sm:p-8"
+      >
+        <span
+          class="bg-surface-sunken text-fg mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full"
+        >
+          <ShieldCheck class="h-6 w-6" aria-hidden="true" />
+        </span>
+        <h2 class="font-display text-fg mb-2 text-xl font-bold">أدخل رمز التحقق</h2>
+        <p class="text-fg-muted mb-6 text-sm">
+          أرسلنا رمزاً من 4 أرقام على واتساب إلى
+          <span class="text-fg font-semibold" dir="ltr">{{ phone }}</span>
+        </p>
 
-      <Transition name="step" mode="out-in">
-        <!-- 1: service -->
-        <section v-if="step === 1" key="s1" aria-labelledby="s1-h">
-          <h1 id="s1-h" class="mb-1 text-xl font-bold text-gray-900">اختر الخدمة</h1>
-          <p class="mb-5 text-sm text-gray-600">السعر والمدة واضحان من البداية.</p>
+        <CodeInput ref="codeBox" :invalid="codeError" @complete="onCode" />
+        <p v-if="codeError" class="text-danger-700 mt-3 text-sm" role="alert">
+          الرمز غير صحيح. حاول مرة أخرى.
+        </p>
+        <p v-if="submitting" class="text-fg-subtle mt-3 text-sm">جاري تأكيد الحجز…</p>
 
-          <div class="grid gap-3 sm:grid-cols-3">
-            <button
-              v-for="s in services"
-              :key="s.id"
-              type="button"
-              class="surface p-4 text-start transition-all"
-              :class="
-                serviceId === s.id
-                  ? 'border-primary-500 ring-primary-500/20 ring-2'
-                  : 'hover:border-primary-300'
-              "
-              :aria-pressed="serviceId === s.id"
-              @click="serviceId = s.id"
+        <div class="text-fg-subtle mt-6 text-sm">
+          <span v-if="resendIn > 0" data-numeric>إعادة الإرسال بعد {{ resendIn }} ثانية</span>
+          <button v-else type="button" class="text-fg font-semibold underline" @click="sendCode">
+            أعد إرسال الرمز
+          </button>
+        </div>
+        <p
+          class="bg-surface-sunken text-fg-subtle mt-6 rounded-[var(--radius-md)] px-3 py-2 text-xs"
+        >
+          نسخة تجريبية: يظهر الرمز في إشعار أعلى الشاشة بدل الواتساب.
+        </p>
+      </div>
+      <p class="text-fg-subtle mt-4 text-center text-xs">
+        نتحقق من الرقم مرة واحدة فقط على هذا الجهاز.
+      </p>
+    </main>
+
+    <!-- ================================================= form -->
+    <main v-else class="mx-auto grid max-w-6xl gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[1fr_22rem]">
+      <div class="min-w-0 space-y-10">
+        <!-- returning -->
+        <div
+          v-if="returning"
+          class="border-border bg-surface flex items-center justify-between gap-3 rounded-[var(--radius-lg)] border px-4 py-3"
+        >
+          <p class="text-fg text-sm">
+            أهلاً <strong>{{ returning.name }}</strong
+            >، بياناتك محفوظة على هذا الجهاز.
+          </p>
+          <button
+            type="button"
+            class="text-fg-subtle hover:text-fg shrink-0 text-sm underline"
+            @click="notMe"
+          >
+            لست أنا
+          </button>
+        </div>
+
+        <!-- 1 · service -->
+        <section id="sec-service" class="scroll-mt-6" aria-labelledby="h-service">
+          <h2 id="h-service" class="text-fg mb-4 flex items-center gap-2.5 text-lg font-bold">
+            <span
+              class="grid h-7 w-7 place-items-center rounded-full text-xs font-bold"
+              :class="done.service ? 'bg-fg text-fg-inverse' : 'border-border-strong border'"
+              aria-hidden="true"
             >
-              <component :is="s.icon" class="text-primary-600 mb-3 h-6 w-6" aria-hidden="true" />
-              <h2 class="text-sm font-bold text-gray-900">{{ s.name }}</h2>
-              <p class="mt-1 line-clamp-2 text-xs leading-relaxed text-gray-500">
-                {{ s.description }}
-              </p>
-              <div class="mt-3 flex items-center justify-between border-t border-gray-100 pt-3">
-                <span class="text-sm font-bold text-gray-900" data-numeric>{{
-                  money(s.priceMinor)
-                }}</span>
-                <span class="text-xs text-gray-500">{{ duration(s.durationMin) }}</span>
-              </div>
+              <Check v-if="done.service" class="h-3.5 w-3.5" />
+              <template v-else>1</template>
+            </span>
+            الخدمة
+          </h2>
+          <!-- categories -->
+          <div
+            v-if="categories.length > 1"
+            class="-mx-4 mb-4 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:px-0"
+            role="tablist"
+            aria-label="تصنيفات الخدمات"
+          >
+            <button
+              v-for="c in ['all', ...categories]"
+              :key="c"
+              type="button"
+              role="tab"
+              :aria-selected="catFilter === c"
+              class="shrink-0 rounded-full border px-4 py-1.5 text-sm font-medium transition-colors"
+              :class="
+                catFilter === c
+                  ? 'border-fg bg-fg text-fg-inverse'
+                  : 'border-border bg-surface text-fg-muted hover:text-fg'
+              "
+              @click="catFilter = c"
+            >
+              {{ c === 'all' ? 'الكل' : c }}
             </button>
           </div>
-        </section>
 
-        <!-- 2: when -->
-        <section v-else-if="step === 2" key="s2" aria-labelledby="s2-h">
-          <h1 id="s2-h" class="mb-1 text-xl font-bold text-gray-900">اختر الموعد</h1>
-          <p class="mb-5 text-sm text-gray-600">
-            الأوقات المعروضة متاحة فعلاً — المحجوز يظهر معطّلاً.
-          </p>
-
-          <div class="surface space-y-5 p-4">
-            <div>
-              <p class="mb-2 text-[13px] font-semibold text-gray-700">اليوم</p>
-              <DateStrip v-model="date" :days="7" />
-            </div>
-            <div>
-              <p class="mb-2 text-[13px] font-semibold text-gray-700">الوقت</p>
-              <TimeSlotGrid
-                :slots="slots"
-                :model-value="startAt"
-                @update:model-value="startAt = $event"
-              />
+          <div role="radiogroup" aria-labelledby="h-service" class="space-y-6">
+            <div v-for="g in serviceGroups" :key="g.name">
+              <p v-if="categories.length > 1" class="text-fg-subtle mb-2 text-[13px] font-semibold">
+                {{ g.name }}
+              </p>
+              <div
+                class="border-border bg-surface divide-border divide-y overflow-hidden rounded-[var(--radius-lg)] border"
+              >
+                <button
+                  v-for="s in g.items"
+                  :key="s.id"
+                  type="button"
+                  role="radio"
+                  :aria-checked="serviceId === s.id"
+                  class="flex w-full items-start gap-3.5 p-4 text-start transition-colors"
+                  :class="serviceId === s.id ? 'bg-surface-sunken' : 'hover:bg-surface-hover'"
+                  @click="serviceId = s.id"
+                >
+                  <span
+                    class="grid h-10 w-10 shrink-0 place-items-center rounded-[var(--radius-md)]"
+                    :class="
+                      serviceId === s.id ? 'bg-fg text-fg-inverse' : 'bg-surface-sunken text-fg'
+                    "
+                  >
+                    <component :is="s.icon" class="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span class="flex items-start justify-between gap-3">
+                      <span class="text-fg font-bold">{{ s.name }}</span>
+                      <span class="text-fg shrink-0 font-bold" data-numeric>{{
+                        money(s.priceMinor)
+                      }}</span>
+                    </span>
+                    <span class="text-fg-subtle mt-0.5 block text-[13px] leading-relaxed">{{
+                      s.description
+                    }}</span>
+                    <span class="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px]">
+                      <span class="text-fg-subtle flex items-center gap-1"
+                        ><Clock class="h-3.5 w-3.5" aria-hidden="true" />{{
+                          duration(s.durationMin)
+                        }}</span
+                      >
+                      <span class="flex items-center gap-2">
+                        <span class="flex -space-x-1.5 rtl:space-x-reverse" aria-hidden="true">
+                          <span
+                            v-for="p in providersOf(s)"
+                            :key="p.id"
+                            class="bg-surface-sunken text-fg ring-surface grid h-6 w-6 place-items-center rounded-full text-[10px] font-bold ring-2"
+                            >{{ initialOf(p.name) }}</span
+                          >
+                        </span>
+                        <span class="text-fg-muted">{{
+                          providersOf(s)
+                            .map((p) => p.name)
+                            .join('، ')
+                        }}</span>
+                      </span>
+                    </span>
+                  </span>
+                  <span
+                    class="mt-1 grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition-colors"
+                    :class="serviceId === s.id ? 'border-fg bg-fg' : 'border-border-strong'"
+                    aria-hidden="true"
+                  >
+                    <Check
+                      v-if="serviceId === s.id"
+                      class="text-fg-inverse h-3 w-3"
+                      stroke-width="3"
+                    />
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
         </section>
 
-        <!-- 3: details -->
-        <section v-else key="s3" aria-labelledby="s3-h">
-          <h1 id="s3-h" class="mb-1 text-xl font-bold text-gray-900">بياناتك</h1>
-          <p class="mb-5 text-sm text-gray-600">نحتاج طريقة نتواصل بها معك لتأكيد الموعد.</p>
+        <!-- 2 · who + when -->
+        <section id="sec-when" class="scroll-mt-6" aria-labelledby="h-when">
+          <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 id="h-when" class="text-fg flex items-center gap-2.5 text-lg font-bold">
+              <span
+                class="grid h-7 w-7 place-items-center rounded-full text-xs font-bold"
+                :class="done.when ? 'bg-fg text-fg-inverse' : 'border-border-strong border'"
+                aria-hidden="true"
+              >
+                <Check v-if="done.when" class="h-3.5 w-3.5" />
+                <template v-else>2</template>
+              </span>
+              الموعد
+            </h2>
+            <button
+              v-if="nearest"
+              type="button"
+              class="border-border bg-surface text-fg hover:border-fg-faint flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] font-semibold"
+              @click="takeNearest"
+            >
+              <Zap class="text-primary-fg h-3.5 w-3.5" aria-hidden="true" />
+              أقرب موعد:
+              <span data-numeric
+                >{{
+                  isSameDay(nearest.day, new Date())
+                    ? 'اليوم'
+                    : isSameDay(nearest.day, addDays(new Date(), 1))
+                      ? 'غداً'
+                      : format(nearest.day, 'EEEE', { locale: ar })
+                }}
+                {{ nearest.slot.label }}</span
+              >
+            </button>
+          </div>
 
-          <div class="surface space-y-4 p-4">
+          <p
+            v-if="!service"
+            class="border-border text-fg-subtle rounded-[var(--radius-lg)] border border-dashed px-4 py-8 text-center text-sm"
+          >
+            اختر الخدمة أولاً لتظهر الأوقات المتاحة.
+          </p>
+
+          <div
+            v-else
+            class="border-border bg-surface space-y-6 rounded-[var(--radius-lg)] border p-4 sm:p-5"
+          >
+            <!-- who -->
+            <div v-if="people.length > 1">
+              <p class="text-fg-muted mb-2 text-[13px] font-semibold">مع من؟</p>
+              <div role="radiogroup" aria-label="اختر المختص" class="flex flex-wrap gap-2">
+                <button
+                  v-for="p in [{ id: ANY, name: 'أي متاح' }, ...people]"
+                  :key="p.id"
+                  type="button"
+                  role="radio"
+                  :aria-checked="who === p.id"
+                  class="flex items-center gap-2 rounded-full border py-1.5 ps-1.5 pe-3.5 text-sm font-medium transition-colors"
+                  :class="
+                    who === p.id
+                      ? 'border-fg bg-fg text-fg-inverse'
+                      : 'border-border text-fg hover:border-fg-faint'
+                  "
+                  @click="who = p.id"
+                >
+                  <span
+                    class="grid h-6 w-6 place-items-center rounded-full text-[11px] font-bold"
+                    :class="who === p.id ? 'bg-fg-inverse/20' : 'bg-surface-sunken'"
+                    aria-hidden="true"
+                  >
+                    <Zap v-if="p.id === ANY" class="h-3 w-3" />
+                    <template v-else>{{ initialOf(p.name) }}</template>
+                  </span>
+                  <span class="text-start leading-tight">
+                    <span class="block">{{ p.name }}</span>
+                    <span
+                      v-if="p.role"
+                      class="block text-[11px]"
+                      :class="who === p.id ? 'opacity-70' : 'text-fg-subtle'"
+                      >{{ p.role }}</span
+                    >
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <DayPicker v-model="date" :free-on="freeCount" :weeks="4" />
+
+            <!-- times -->
+            <div>
+              <p class="text-fg-muted mb-3 text-[13px] font-semibold">
+                الأوقات المتاحة {{ dayTitle }}
+              </p>
+              <p
+                v-if="!slots.length"
+                class="bg-surface-sunken text-fg-subtle rounded-[var(--radius-md)] px-4 py-6 text-center text-sm"
+              >
+                لا يوجد دوام في هذا اليوم. اختر يوماً آخر.
+              </p>
+              <div v-else class="space-y-4">
+                <div v-for="g in grouped" :key="g.key">
+                  <p class="text-fg-subtle mb-2 text-xs">{{ g.label }}</p>
+                  <div
+                    role="radiogroup"
+                    :aria-label="`أوقات ${g.label}`"
+                    class="grid grid-cols-3 gap-2 sm:grid-cols-5"
+                  >
+                    <button
+                      v-for="s in g.slots"
+                      :key="s.startAt"
+                      type="button"
+                      role="radio"
+                      :aria-checked="startAt === s.startAt"
+                      :disabled="s.state !== 'available'"
+                      :aria-label="s.state === 'available' ? s.label : `${s.label}، غير متاح`"
+                      class="h-10 rounded-[var(--radius-md)] border text-sm font-semibold transition-colors"
+                      :class="
+                        startAt === s.startAt
+                          ? 'border-primary bg-primary text-white'
+                          : s.state === 'available'
+                            ? 'border-border text-fg hover:border-fg'
+                            : 'text-fg-faint cursor-not-allowed border-transparent line-through'
+                      "
+                      data-numeric
+                      @click="startAt = s.startAt"
+                    >
+                      {{ s.label }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <WaitlistJoin
+            v-if="serviceId"
+            :key="`${serviceId}:${date.toISOString()}`"
+            :service-id="serviceId"
+            :date="date"
+            :full="dayIsFull"
+          />
+        </section>
+
+        <!-- 3 · details -->
+        <section id="sec-details" class="scroll-mt-6" aria-labelledby="h-details">
+          <h2 id="h-details" class="text-fg mb-4 flex items-center gap-2.5 text-lg font-bold">
+            <span
+              class="grid h-7 w-7 place-items-center rounded-full text-xs font-bold"
+              :class="done.details ? 'bg-fg text-fg-inverse' : 'border-border-strong border'"
+              aria-hidden="true"
+            >
+              <Check v-if="done.details" class="h-3.5 w-3.5" />
+              <template v-else>3</template>
+            </span>
+            بياناتك
+          </h2>
+          <div
+            class="border-border bg-surface grid gap-4 rounded-[var(--radius-lg)] border p-4 sm:grid-cols-2 sm:p-5"
+          >
             <BaseInput
               v-model="name"
               label="الاسم الكامل"
@@ -409,56 +780,95 @@ const STEPS = ['الخدمة', 'الموعد', 'بياناتك']
               required
               placeholder="05XXXXXXXX"
               :error="phoneError"
-              hint="سنرسل تأكيد الحجز على هذا الرقم."
+              hint="يصلك عليه التذكير وتأكيد الموعد."
             />
             <BaseInput
               v-model="notes"
-              label="ملاحظات"
+              class="sm:col-span-2"
+              label="ملاحظات للمنشأة"
               type="textarea"
-              :rows="3"
+              :rows="2"
               placeholder="اختياري"
             />
           </div>
-
-          <!-- summary is visible before committing, not hidden behind a step -->
-          <div v-if="service && startAt" class="surface mt-4 divide-y divide-gray-200">
-            <div class="flex justify-between p-3 text-sm">
-              <span class="text-gray-500">الخدمة</span>
-              <span class="font-semibold text-gray-900">{{ service.name }}</span>
-            </div>
-            <div class="flex justify-between p-3 text-sm">
-              <span class="text-gray-500">الموعد</span>
-              <span class="font-semibold text-gray-900">
-                {{ fullDate(startAt) }} · {{ time(startAt) }}
-              </span>
-            </div>
-            <div class="flex justify-between p-3 text-sm">
-              <span class="text-gray-500">الإجمالي</span>
-              <span class="font-bold text-gray-900" data-numeric>{{
-                money(service.priceMinor)
-              }}</span>
-            </div>
-          </div>
+          <p class="text-fg-subtle mt-3 flex items-center gap-1.5 text-xs">
+            <ShieldCheck class="h-3.5 w-3.5" aria-hidden="true" />
+            لا تحتاج حساباً ولا كلمة مرور. نتحقق من رقمك مرة واحدة برمز على الواتساب.
+          </p>
         </section>
-      </Transition>
+      </div>
 
-      <!-- actions -->
-      <div class="mt-6 flex items-center justify-between gap-3 border-t border-gray-200 pt-5">
-        <BaseButton v-if="step > 1" :icon="ArrowRight" @click="goBack">السابق</BaseButton>
-        <span v-else />
+      <!-- summary: beside the form on desktop -->
+      <aside class="hidden lg:block">
+        <div class="border-border bg-surface sticky top-6 rounded-[var(--radius-xl)] border p-5">
+          <p class="text-fg mb-4 font-bold">ملخص الحجز</p>
+          <dl class="space-y-3 text-sm">
+            <div class="flex justify-between gap-3">
+              <dt class="text-fg-subtle">الخدمة</dt>
+              <dd class="text-fg text-end font-semibold">{{ service?.name ?? '—' }}</dd>
+            </div>
+            <div class="flex justify-between gap-3">
+              <dt class="text-fg-subtle">مع</dt>
+              <dd class="text-fg font-semibold">
+                {{ resourceName ?? (who === ANY ? 'أي متاح' : '—') }}
+              </dd>
+            </div>
+            <div class="flex justify-between gap-3">
+              <dt class="text-fg-subtle">الموعد</dt>
+              <dd class="text-fg text-end font-semibold" data-numeric>
+                {{ startAt ? `${fullDate(startAt)} · ${time(startAt)}` : '—' }}
+              </dd>
+            </div>
+            <div class="flex justify-between gap-3">
+              <dt class="text-fg-subtle">المدة</dt>
+              <dd class="text-fg font-semibold">
+                {{ service ? duration(service.durationMin) : '—' }}
+              </dd>
+            </div>
+          </dl>
+          <div class="border-border mt-4 flex items-baseline justify-between border-t pt-4">
+            <span class="text-fg-subtle text-sm">الإجمالي</span>
+            <span class="text-fg text-xl font-bold" data-numeric>{{
+              service ? money(service.priceMinor) : '—'
+            }}</span>
+          </div>
+          <button
+            type="button"
+            class="mt-5 w-full rounded-[var(--radius-md)] py-3 text-sm font-bold transition-colors"
+            :class="ready ? 'btn-brand' : 'bg-surface-sunken text-fg-muted hover:text-fg'"
+            :disabled="submitting"
+            @click="confirm"
+          >
+            {{ nextAction.label }}
+          </button>
+          <p class="text-fg-subtle mt-3 text-center text-xs">الدفع في المنشأة عند الحضور.</p>
+        </div>
+      </aside>
 
-        <BaseButton
-          v-if="step < 3"
-          variant="primary"
-          :icon-end="ArrowLeft"
-          :disabled="!canContinue"
-          @click="goNext"
-        >
-          التالي
-        </BaseButton>
-        <BaseButton v-else variant="primary" :loading="submitting" @click="submit">
-          تأكيد الحجز
-        </BaseButton>
+      <!-- summary: a bar along the bottom on a phone -->
+      <div
+        class="bg-surface/95 border-border fixed inset-x-0 bottom-0 z-30 border-t px-4 py-3 backdrop-blur lg:hidden"
+      >
+        <div class="mx-auto flex max-w-6xl items-center gap-3">
+          <div class="min-w-0 flex-1">
+            <p class="text-fg truncate text-sm font-bold">
+              {{ service?.name ?? 'لم تختر خدمة بعد' }}
+            </p>
+            <p class="text-fg-subtle truncate text-xs" data-numeric>
+              <template v-if="startAt">{{ fullDate(startAt) }} · {{ time(startAt) }} · </template>
+              {{ service ? money(service.priceMinor) : '' }}
+            </p>
+          </div>
+          <button
+            type="button"
+            class="shrink-0 rounded-[var(--radius-md)] px-5 py-3 text-sm font-bold"
+            :class="ready ? 'btn-brand' : 'bg-fg text-fg-inverse'"
+            :disabled="submitting"
+            @click="confirm"
+          >
+            {{ nextAction.label }}
+          </button>
+        </div>
       </div>
     </main>
   </div>

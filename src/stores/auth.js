@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { isDemoBackend } from '@/data/repository'
+import { isDemoBackend, repository } from '@/data/repository'
+import { business } from '@/data/business'
 
 const KEY = 'bookingpro:session:v1'
 
@@ -93,6 +94,7 @@ export const useAuthStore = defineStore('auth', () => {
         name: 'مدير النظام',
         email,
         role: 'operator',
+        orgSlug: business.slug,
       }
       user.value = session
       try {
@@ -132,6 +134,79 @@ export const useAuthStore = defineStore('auth', () => {
     })
   }
 
+  /**
+   * Open a business: the owner's account, the business, its staff, services
+   * and hours, then signed straight in as its operator.
+   *
+   * @param {{ fullName: string, email: string, password: string,
+   *   business: { name: string, slug: string, category?: string, address?: string },
+   *   staff: { name: string, role?: string }[],
+   *   services: { name: string, category?: string, durationMin: number,
+   *     priceMinor: number, iconKey?: string }[],
+   *   hours: { weekday: number, open: string, close: string, isClosed: boolean }[] }} input
+   */
+  async function signUpBusiness(input) {
+    if (isDemoBackend) {
+      const staff = input.staff.map((m, i) => ({
+        id: `r_${i + 1}_${Date.now().toString(36)}`,
+        name: m.name,
+        role: m.role || null,
+        isActive: true,
+      }))
+      await repository.openBusiness({
+        business: { ...input.business },
+        resources: staff,
+        services: input.services.map((s, i) => ({
+          id: `s_${i + 1}_${Date.now().toString(36)}`,
+          name: s.name,
+          category: s.category || null,
+          description: '',
+          durationMin: s.durationMin,
+          bufferMin: 10,
+          priceMinor: s.priceMinor,
+          resourceIds: staff.map((r) => r.id),
+          iconKey: s.iconKey || 'Sparkles',
+          isActive: true,
+        })),
+        businessHours: input.hours,
+      })
+      const session = {
+        id: 'demo-operator',
+        name: input.fullName,
+        email: input.email,
+        role: 'operator',
+        orgSlug: input.business.slug,
+      }
+      user.value = session
+      try {
+        localStorage.setItem(KEY, JSON.stringify(session))
+      } catch {
+        /* session stays in memory only */
+      }
+      return session
+    }
+
+    const { request, writeToken } = await import('@/data/api/client')
+    const data = await request('/auth/register-business', {
+      method: 'POST',
+      body: input,
+      auth: false,
+    })
+    writeToken(data.token)
+    user.value = data.user
+    return data.user
+  }
+
+  /** Is waeda.app/b/{slug} free? Always, on the demo, unless it is the clinic's. */
+  async function slugAvailable(slug) {
+    if (isDemoBackend) return slug !== 'alrayhan'
+    const { request } = await import('@/data/api/client')
+    const r = await request(`/auth/slug-available?slug=${encodeURIComponent(slug)}`, {
+      auth: false,
+    })
+    return r.available
+  }
+
   async function signOut() {
     const wasSignedIn = user.value !== null
     user.value = null
@@ -157,6 +232,8 @@ export const useAuthStore = defineStore('auth', () => {
     init,
     signIn,
     signUp,
+    signUpBusiness,
+    slugAvailable,
     signOut,
   }
 })

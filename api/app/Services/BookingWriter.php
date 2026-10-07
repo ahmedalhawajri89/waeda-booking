@@ -112,9 +112,11 @@ class BookingWriter
     {
         return DB::transaction(function () use ($input, $actorId) {
             /** @var Service $service */
-            $service = Service::query()->whereKey($input['service_id'])->firstOrFail();
+            $service = Service::query()->where('org_id', $input['org_id'])->whereKey($input['service_id'])->firstOrFail();
 
-            $start = Carbon::parse($input['start_at']);
+            // UTC before it touches the database: the column has no zone, and an
+            // offset left on the instant was stored as if it were UTC.
+            $start = Carbon::parse($input['start_at'])->utc();
             $end = $start->copy()->addMinutes($service->occupiedMinutes());
 
             $this->lockResource($input['resource_id']);
@@ -123,6 +125,9 @@ class BookingWriter
             }
 
             $booking = Booking::create([
+                // A client-chosen id makes creation idempotent: a retried
+                // request finds its own row instead of booking twice.
+                ...(isset($input['id']) ? ['id' => $input['id']] : []),
                 'org_id' => $input['org_id'],
                 'reference' => $this->nextReference(),
                 'customer_id' => $input['customer_id'],
@@ -156,50 +161,92 @@ class BookingWriter
      *
      * @throws BookingConflict
      */
-    public function update(Booking $booking, array $input, ?int $actorId = null): Booking
+    /**
+     * @param  array{type: string, summary: string}|null  $statusEvent  Recorded instead of the
+     *         generic entry when the status changes — "released for silence" rather than "cancelled".
+     */
+    public function update(Booking $booking, array $input, ?int $actorId = null, ?array $statusEvent = null): Booking
     {
-        return DB::transaction(function () use ($booking, $input, $actorId) {
+        return DB::transaction(function () use ($booking, $input, $actorId, $statusEvent) {
             $before = $booking->replicate();
 
-            $start = isset($input['start_at']) ? Carbon::parse($input['start_at']) : $booking->start_at;
+            $start = isset($input['start_at']) ? Carbon::parse($input['start_at'])->utc() : $booking->start_at;
             $status = $input['status'] ?? $booking->status;
             $resourceId = $input['resource_id'] ?? $booking->resource_id;
+            $serviceId = $input['service_id'] ?? $booking->service_id;
 
-            $moved = ! $start->equalTo($booking->start_at) || $resourceId !== $booking->resource_id;
+            /** @var Service $service */
+            $service = Service::query()->where('org_id', $booking->org_id)->whereKey($serviceId)->firstOrFail();
+            $serviceChanged = $serviceId !== $booking->service_id;
+
+            // The end follows the start and the service, always. It used to be
+            // recomputed only when the slot needed re-checking, so a cancelled
+            // booking moved forward kept its old end and broke end > start.
+            $end = $start->copy()->addMinutes($service->occupiedMinutes());
+
+            $moved = ! $start->equalTo($booking->start_at)
+                || ! $end->equalTo($booking->end_at)
+                || $resourceId !== $booking->resource_id;
             $becomesBlocking = in_array($status, Booking::BLOCKING, true);
 
             // A cancelled booking releases its time, so it needs no check. One
-            // that moves, or comes back to life, has to earn its slot again.
+            // that moves, grows, or comes back to life has to earn its slot again.
             if ($becomesBlocking && ($moved || ! in_array($booking->status, Booking::BLOCKING, true))) {
-                $service = Service::query()->whereKey($input['service_id'] ?? $booking->service_id)->firstOrFail();
-                $end = $start->copy()->addMinutes($service->occupiedMinutes());
-
                 $this->lockResource($resourceId);
                 if ($this->overlaps($resourceId, $start, $end, $booking->id)) {
                     throw new BookingConflict();
                 }
-                $booking->end_at = $end;
             }
 
             $booking->fill([
                 'status' => $status,
                 'payment_status' => $input['payment_status'] ?? $booking->payment_status,
                 'resource_id' => $resourceId,
-                'notes' => $input['notes'] ?? $booking->notes,
+                'service_id' => $serviceId,
+                'customer_id' => $input['customer_id'] ?? $booking->customer_id,
+                'channel' => $input['channel'] ?? $booking->channel,
+                // Present-and-null clears; absent leaves alone. `??` made the
+                // two the same, so a note could never be removed.
+                'notes' => array_key_exists('notes', $input) ? $input['notes'] : $booking->notes,
             ]);
+            // The price is a snapshot of the service booked; a different
+            // service is a different price.
+            if ($serviceChanged) {
+                $booking->price_minor = $service->price_minor;
+            }
             $booking->start_at = $start;
+            $booking->end_at = $end;
             $booking->save();
 
-            $this->recordChanges($booking, $before, $actorId);
+            $this->recordChanges($booking, $before, $actorId, $statusEvent);
 
             return $booking->load('events');
         });
     }
 
-    /** The trigger that used to do this in Postgres, in one place instead of two. */
-    private function recordChanges(Booking $now, Booking $before, ?int $actorId): void
+    /** An entry in the history that changes nothing else — a customer confirming, a note. */
+    public function record(Booking $booking, string $type, string $summary, ?int $actorId = null): Booking
     {
-        if ($now->status !== $before->status) {
+        $this->event($booking, $type, $summary, $actorId);
+
+        return $booking->load('events');
+    }
+
+    /** "الأحد 10:00" in the organization's zone — what the operator saw on screen. */
+    private function wallClock(Booking $booking, CarbonInterface $at): string
+    {
+        $tz = \App\Models\Organization::query()->whereKey($booking->org_id)->value('timezone') ?? 'UTC';
+        $local = $at->copy()->setTimezone($tz)->locale('ar');
+
+        return $local->translatedFormat('l').' '.$local->format('j/n H:i');
+    }
+
+    /** The trigger that used to do this in Postgres, in one place instead of two. */
+    private function recordChanges(Booking $now, Booking $before, ?int $actorId, ?array $statusEvent = null): void
+    {
+        if ($now->status !== $before->status && $statusEvent) {
+            $this->event($now, $statusEvent['type'], $statusEvent['summary'], $actorId);
+        } elseif ($now->status !== $before->status) {
             $type = match ($now->status) {
                 'confirmed' => 'confirmed',
                 'completed' => 'completed',
@@ -227,8 +274,16 @@ class BookingWriter
             }, $actorId);
         }
 
-        if (! $now->start_at->equalTo($before->start_at)) {
-            $this->event($now, 'rescheduled', 'أُعيدت جدولة الحجز', $actorId);
+        if (! $now->start_at->equalTo($before->start_at) || $now->resource_id !== $before->resource_id) {
+            $this->event($now, 'rescheduled', sprintf(
+                'أُعيدت جدولة الحجز من %s إلى %s',
+                $this->wallClock($now, $before->start_at),
+                $this->wallClock($now, $now->start_at),
+            ), $actorId);
+        }
+
+        if ($now->service_id !== $before->service_id) {
+            $this->event($now, 'note_added', 'تغيّرت الخدمة', $actorId);
         }
 
         if (($now->notes ?? '') !== ($before->notes ?? '')) {

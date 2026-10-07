@@ -222,6 +222,15 @@ describe('occupancyFor', () => {
     expect(occupancyFor(OPEN_DAY, [booking({ status: 'cancelled' })], hours).bookedMin).toBe(0)
   })
 
+  it('counts completed bookings, which used their time', () => {
+    expect(occupancyFor(OPEN_DAY, [booking({ status: 'completed' })], hours).bookedMin).toBe(
+      occupancyFor(OPEN_DAY, [booking({ status: 'confirmed' })], hours).bookedMin,
+    )
+    expect(
+      occupancyFor(OPEN_DAY, [booking({ status: 'completed' })], hours).bookedMin,
+    ).toBeGreaterThan(0)
+  })
+
   it('never exceeds 1 even when bookings overlap', () => {
     const many = Array.from({ length: 10 }, (_, i) => booking({ id: `b${i}`, resourceId: `r${i}` }))
     expect(occupancyFor(OPEN_DAY, many, hours).ratio).toBeLessThanOrEqual(1)

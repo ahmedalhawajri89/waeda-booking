@@ -1,48 +1,91 @@
 <script setup>
 import { computed } from 'vue'
-import { CalendarCheck, PartyPopper, RefreshCw, TriangleAlert } from 'lucide-vue-next'
+import {
+  ArrowLeft,
+  CalendarCheck,
+  Copy,
+  MessageCircle,
+  RefreshCw,
+  ShieldCheck,
+  TriangleAlert,
+} from 'lucide-vue-next'
+import { toast } from 'vue-sonner'
 import { useBookingsStore } from '@/stores/bookings'
+import { useGuardStore } from '@/stores/guard'
+import { useAuthStore } from '@/stores/auth'
+import { resources } from '@/data/catalog'
+import { business } from '@/data/business'
+import { useBookingMove } from '@/composables/useBookingMove'
 import { ATTENTION } from '@/lib/status'
-import { duration, money, relativeDayTime, time } from '@/lib/format'
+import { money, relativeDayTime, time } from '@/lib/format'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import SkeletonBlock from '@/components/ui/SkeletonBlock.vue'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
-import DayTimeline from '@/components/booking/DayTimeline.vue'
+import ResourceDay from '@/components/booking/ResourceDay.vue'
 
 /**
- * The operator's working surface, ordered by the questions actually asked:
- * what needs me → what is the shape of my day → what is next → how full am I.
+ * The working surface, read in the order the morning asks it:
+ *   how does today look (the numbers) → who is where, when (the day, one
+ *   column per person) → what needs me, and what is next (the side).
+ * A business with no bookings yet is shown the one thing that brings them:
+ * its own booking link.
  */
-const emit = defineEmits(['openBooking'])
+const emit = defineEmits(['openBooking', 'createAt'])
 const store = useBookingsStore()
+const guard = useGuardStore()
+const auth = useAuthStore()
+const { move } = useBookingMove()
 
+const team = computed(() => resources.filter((r) => r.isActive))
+const live = computed(() =>
+  store.today.filter((b) => b.status !== 'cancelled' && b.status !== 'no_show'),
+)
 const attention = computed(() => store.attention)
-const todays = computed(() => store.today)
-const next = computed(() => store.upcoming.slice(0, 3))
+const next = computed(() => store.upcoming.slice(0, 4))
 const occupancy = computed(() => store.occupancyToday)
 
-const unpaidToday = computed(
-  () => todays.value.filter((b) => b.paymentStatus === 'unpaid' && b.status !== 'cancelled').length,
-)
-const expectedToday = computed(() =>
-  todays.value
-    .filter((b) => b.status !== 'cancelled' && b.status !== 'no_show')
-    .reduce((sum, b) => sum + b.priceMinor, 0),
-)
+const KPIS = computed(() => [
+  { label: 'مواعيد اليوم', value: live.value.length },
+  {
+    label: 'المؤكدة',
+    value: live.value.filter((b) => b.status === 'confirmed' || b.status === 'completed').length,
+  },
+  {
+    label: 'بانتظار التأكيد',
+    value: live.value.filter((b) => b.status === 'pending').length,
+    warn: true,
+  },
+  { label: 'الإشغال', value: `${Math.round(occupancy.value.ratio * 100)}%` },
+  { label: 'المتوقع اليوم', value: money(live.value.reduce((s, b) => s + b.priceMinor, 0)) },
+])
 
-const freeMin = computed(() => Math.max(0, occupancy.value.openMin - occupancy.value.bookedMin))
+const protectedTotal = computed(() => guard.protectedRevenue?.total ?? 0)
+
+/* the link, for a business still waiting on its first bookings */
+const isNew = computed(() => store.loaded && store.items.length === 0)
+const url = computed(() => `${window.location.origin}/b/${auth.user?.orgSlug || business.slug}`)
+async function copyLink() {
+  try {
+    await navigator.clipboard.writeText(url.value)
+    toast.success('نُسخ رابط صفحة الحجز')
+  } catch {
+    toast.error('تعذّر النسخ')
+  }
+}
+const shareUrl = computed(
+  () =>
+    `https://wa.me/?text=${encodeURIComponent(`احجز موعدك في ${business.name}:\n${url.value}`)}`,
+)
 </script>
 
 <template>
-  <div class="mx-auto max-w-7xl p-4 lg:p-6">
-    <!-- loading -->
+  <div class="w-full p-4 lg:p-6 2xl:px-8">
     <div v-if="store.isLoading && !store.loaded" class="space-y-4">
       <SkeletonBlock variant="card" :count="1" />
       <SkeletonBlock variant="row" :count="5" />
     </div>
 
-    <!-- error -->
     <div v-else-if="store.error" class="surface">
       <EmptyState
         variant="error"
@@ -58,160 +101,183 @@ const freeMin = computed(() => Math.max(0, occupancy.value.openMin - occupancy.v
       </EmptyState>
     </div>
 
-    <template v-else>
-      <!-- needs attention — rendered only when it has something to say -->
-      <section v-if="attention.length" class="mb-5" aria-labelledby="attention-heading">
-        <h2
-          id="attention-heading"
-          class="mb-2 flex items-center gap-2 text-sm font-bold text-gray-900"
+    <!-- a business with nothing yet: the link is the next step -->
+    <div v-else-if="isNew" class="surface mx-auto max-w-2xl p-8 text-center sm:p-12">
+      <span
+        class="bg-surface-sunken text-fg mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full"
+      >
+        <CalendarCheck class="h-6 w-6" aria-hidden="true" />
+      </span>
+      <h2 class="font-display text-fg mb-2 text-xl font-bold">لا حجوزات بعد</h2>
+      <p class="text-fg-muted mb-6">
+        شارك رابط صفحة الحجز مع عملائك، وكل حجز يظهر هنا في جدول اليوم. أو أضف أول موعد بنفسك.
+      </p>
+      <div
+        class="border-border bg-surface-sunken mx-auto mb-4 flex max-w-md items-center gap-2 rounded-[var(--radius-md)] border p-1.5 ps-3"
+      >
+        <span class="text-fg min-w-0 flex-1 truncate text-start text-sm font-semibold" dir="ltr">{{
+          url.replace(/^https?:\/\//, '')
+        }}</span>
+        <button
+          type="button"
+          class="bg-surface text-fg hover:bg-surface-hover flex items-center gap-1.5 rounded-[var(--radius-sm)] px-3 py-1.5 text-sm font-semibold"
+          @click="copyLink"
         >
-          <TriangleAlert class="text-warning-700 h-4 w-4" aria-hidden="true" />
-          يحتاج إجراء
-          <span
-            class="bg-warning-100 text-warning-700 rounded-full px-2 py-0.5 text-xs"
+          <Copy class="h-4 w-4" aria-hidden="true" /> نسخ
+        </button>
+      </div>
+      <div class="flex flex-wrap justify-center gap-2">
+        <a
+          :href="shareUrl"
+          target="_blank"
+          rel="noopener"
+          class="border-border bg-surface text-fg hover:bg-surface-hover flex items-center gap-2 rounded-[var(--radius-md)] border px-4 py-2.5 text-sm font-bold"
+        >
+          <MessageCircle class="h-4 w-4" aria-hidden="true" /> شارك على واتساب
+        </a>
+        <BaseButton variant="primary" @click="emit('createAt', null)">أضف موعداً</BaseButton>
+      </div>
+    </div>
+
+    <template v-else>
+      <!-- the numbers -->
+      <dl class="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        <div
+          v-for="k in KPIS"
+          :key="k.label"
+          class="border-border bg-surface rounded-[var(--radius-lg)] border px-4 py-3"
+        >
+          <dt class="text-fg-subtle text-xs">{{ k.label }}</dt>
+          <dd
+            class="font-display mt-0.5 text-xl font-bold"
+            :class="k.warn && k.value ? 'text-warning-700' : 'text-fg'"
             data-numeric
           >
-            {{ attention.length }}
-          </span>
-        </h2>
+            {{ k.value }}
+          </dd>
+        </div>
+        <RouterLink
+          to="/app/guard"
+          class="border-border bg-surface hover:border-border-strong rounded-[var(--radius-lg)] border px-4 py-3 transition-colors"
+        >
+          <dt class="text-fg-subtle flex items-center gap-1 text-xs">
+            <ShieldCheck class="text-primary-fg h-3.5 w-3.5" aria-hidden="true" /> حماه الحارس
+          </dt>
+          <dd class="font-display text-fg mt-0.5 text-xl font-bold" data-numeric>
+            {{ money(protectedTotal) }}
+          </dd>
+        </RouterLink>
+      </dl>
 
-        <ul class="surface divide-y divide-gray-200 overflow-hidden">
-          <li v-for="item in attention" :key="item.booking.id">
-            <button
-              type="button"
-              class="hover:bg-warning-50/60 flex w-full items-center gap-3 px-4 py-3 text-start transition-colors"
-              @click="emit('openBooking', item.booking.id)"
+      <div class="grid gap-5 xl:grid-cols-[1fr_22rem]">
+        <!-- the day, one column per person -->
+        <section class="surface min-w-0 overflow-hidden" aria-labelledby="day-h">
+          <header class="border-border flex items-center justify-between border-b px-4 py-3">
+            <h2 id="day-h" class="text-fg text-sm font-bold">جدول اليوم</h2>
+            <RouterLink
+              to="/app/calendar"
+              class="text-fg-subtle hover:text-fg flex items-center gap-1 text-xs font-semibold"
             >
-              <component
-                :is="ATTENTION[item.reason].icon"
-                class="h-4 w-4 shrink-0"
-                :class="
-                  ATTENTION[item.reason].tone === 'danger' ? 'text-danger-700' : 'text-warning-700'
-                "
-                aria-hidden="true"
-              />
-              <span class="min-w-0 flex-1">
-                <span class="block truncate text-sm font-semibold text-gray-900">
-                  {{ store.hydrate(item.booking).customer?.name }}
-                </span>
-                <span class="block truncate text-xs text-gray-500">
-                  {{ ATTENTION[item.reason].label }} · {{ relativeDayTime(item.booking.startAt) }}
-                </span>
-              </span>
-              <StatusBadge :status="item.booking.status" size="sm" class="hidden sm:inline-flex" />
-            </button>
-          </li>
-        </ul>
-      </section>
-
-      <div class="grid gap-5 lg:grid-cols-[1fr_20rem]">
-        <!-- the day -->
-        <section class="surface overflow-hidden" aria-labelledby="timeline-heading">
-          <header class="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-            <h2 id="timeline-heading" class="text-sm font-bold text-gray-900">جدول اليوم</h2>
-            <span class="text-xs text-gray-500">
-              <span data-numeric>{{ todays.length }}</span> حجز
-            </span>
+              التقويم الكامل <ArrowLeft class="h-3.5 w-3.5 ltr:rotate-180" aria-hidden="true" />
+            </RouterLink>
           </header>
-
-          <div v-if="todays.length === 0" class="px-4">
-            <EmptyState
-              variant="first-run"
-              :icon="PartyPopper"
-              title="لا حجوزات اليوم"
-              description="يومك فارغ تماماً. استخدم زر «حجز جديد» أو اضغط N لإضافة موعد."
-            />
-          </div>
-          <div v-else class="p-4">
-            <DayTimeline
-              :date="new Date()"
-              :bookings="todays"
-              @open="emit('openBooking', $event)"
-            />
-          </div>
+          <ResourceDay
+            :date="new Date()"
+            :resources="team"
+            :scale="1.1"
+            @open="emit('openBooking', $event)"
+            @create="emit('createAt', $event)"
+            @move="move"
+          />
         </section>
 
-        <!-- next up + pulse -->
+        <!-- what needs me, and what is next -->
         <div class="space-y-5">
-          <section class="surface overflow-hidden" aria-labelledby="next-heading">
-            <header class="border-b border-gray-200 px-4 py-3">
-              <h2 id="next-heading" class="text-sm font-bold text-gray-900">التالي</h2>
+          <section class="surface overflow-hidden" aria-labelledby="att-h">
+            <header class="border-border flex items-center justify-between border-b px-4 py-3">
+              <h2 id="att-h" class="text-fg flex items-center gap-2 text-sm font-bold">
+                يحتاج إجراء
+                <span
+                  v-if="attention.length"
+                  class="bg-warning-100 text-warning-700 rounded-full px-2 py-0.5 text-xs"
+                  data-numeric
+                  >{{ attention.length }}</span
+                >
+              </h2>
+              <RouterLink
+                v-if="attention.length > 4"
+                to="/app/bookings?filter=attention"
+                class="text-fg-subtle hover:text-fg text-xs font-semibold"
+                >عرض الكل</RouterLink
+              >
             </header>
-
-            <div v-if="next.length === 0" class="px-4">
-              <EmptyState
-                variant="no-results"
-                :icon="CalendarCheck"
-                title="لا مواعيد قادمة"
-                description="لا يوجد شيء مجدول بعد هذه اللحظة."
-              />
-            </div>
-            <ul v-else class="divide-y divide-gray-200">
-              <li v-for="b in next" :key="b.id">
+            <p v-if="!attention.length" class="text-fg-subtle px-4 py-6 text-center text-sm">
+              لا شيء ينتظرك الآن.
+            </p>
+            <ul v-else class="divide-border divide-y">
+              <li v-for="item in attention.slice(0, 4)" :key="item.booking.id + item.reason">
                 <button
                   type="button"
-                  class="hover:bg-primary-50/40 flex w-full items-center gap-3 px-4 py-3 text-start transition-colors"
-                  @click="emit('openBooking', b.id)"
+                  class="hover:bg-surface-hover flex w-full items-start gap-3 px-4 py-3 text-start transition-colors"
+                  @click="emit('openBooking', item.booking.id)"
                 >
-                  <time :datetime="b.startAt" class="w-16 shrink-0 text-sm font-bold text-gray-900">
-                    {{ time(b.startAt) }}
-                  </time>
+                  <component
+                    :is="ATTENTION[item.reason].icon"
+                    class="mt-0.5 h-4 w-4 shrink-0"
+                    :class="
+                      ATTENTION[item.reason].tone === 'danger'
+                        ? 'text-danger-700'
+                        : 'text-warning-700'
+                    "
+                    aria-hidden="true"
+                  />
                   <span class="min-w-0 flex-1">
-                    <span class="block truncate text-sm text-gray-900">
-                      {{ store.hydrate(b).customer?.name }}
-                    </span>
-                    <span class="block truncate text-xs text-gray-500">
-                      {{ store.hydrate(b).service?.name }}
-                    </span>
+                    <span class="text-fg block truncate text-sm font-semibold">{{
+                      store.hydrate(item.booking).customer?.name
+                    }}</span>
+                    <span class="text-fg-subtle block truncate text-xs"
+                      >{{ ATTENTION[item.reason].label }} ·
+                      {{ relativeDayTime(item.booking.startAt) }}</span
+                    >
                   </span>
-                  <StatusBadge :status="b.status" size="sm" icon-only />
                 </button>
               </li>
             </ul>
           </section>
 
-          <section class="surface p-4" aria-labelledby="pulse-heading">
-            <h2 id="pulse-heading" class="mb-3 text-sm font-bold text-gray-900">نبض اليوم</h2>
-
-            <div class="mb-1.5 flex items-baseline justify-between">
-              <span class="text-xs text-gray-500">الإشغال</span>
-              <span class="text-sm font-bold text-gray-900" data-numeric>
-                {{ Math.round(occupancy.ratio * 100) }}%
-              </span>
-            </div>
-            <div
-              class="h-2 overflow-hidden rounded-full bg-gray-100"
-              role="progressbar"
-              :aria-valuenow="Math.round(occupancy.ratio * 100)"
-              aria-valuemin="0"
-              aria-valuemax="100"
-              aria-label="نسبة إشغال اليوم"
-            >
-              <div
-                class="bg-primary-500 h-full rounded-full transition-[width] duration-500"
-                :style="{ width: `${Math.round(occupancy.ratio * 100)}%` }"
-              />
-            </div>
-
-            <dl class="mt-4 space-y-2.5 text-sm">
-              <div class="flex justify-between">
-                <dt class="text-gray-500">وقت متاح</dt>
-                <dd class="font-semibold text-gray-900">{{ duration(Math.round(freeMin)) }}</dd>
-              </div>
-              <div class="flex justify-between">
-                <dt class="text-gray-500">غير مدفوع</dt>
-                <dd
-                  class="font-semibold"
-                  :class="unpaidToday ? 'text-warning-700' : 'text-gray-900'"
+          <section class="surface overflow-hidden" aria-labelledby="next-h">
+            <header class="border-border border-b px-4 py-3">
+              <h2 id="next-h" class="text-fg text-sm font-bold">التالي</h2>
+            </header>
+            <p v-if="!next.length" class="text-fg-subtle px-4 py-6 text-center text-sm">
+              لا مواعيد قادمة.
+            </p>
+            <ul v-else class="divide-border divide-y">
+              <li v-for="b in next" :key="b.id">
+                <button
+                  type="button"
+                  class="hover:bg-surface-hover flex w-full items-center gap-3 px-4 py-3 text-start transition-colors"
+                  @click="emit('openBooking', b.id)"
                 >
-                  <span data-numeric>{{ unpaidToday }}</span> حجز
-                </dd>
-              </div>
-              <div class="flex justify-between border-t border-gray-200 pt-2.5">
-                <dt class="text-gray-500">إجمالي متوقع</dt>
-                <dd class="font-bold text-gray-900" data-numeric>{{ money(expectedToday) }}</dd>
-              </div>
-            </dl>
+                  <time
+                    :datetime="b.startAt"
+                    class="text-fg w-16 shrink-0 text-sm font-bold whitespace-nowrap"
+                    data-numeric
+                    >{{ time(b.startAt) }}</time
+                  >
+                  <span class="min-w-0 flex-1">
+                    <span class="text-fg block truncate text-sm">{{
+                      store.hydrate(b).customer?.name
+                    }}</span>
+                    <span class="text-fg-subtle block truncate text-xs"
+                      >{{ store.hydrate(b).service?.name }} ·
+                      {{ store.hydrate(b).resource?.name }}</span
+                    >
+                  </span>
+                  <StatusBadge :status="b.status" size="sm" icon-only />
+                </button>
+              </li>
+            </ul>
           </section>
         </div>
       </div>

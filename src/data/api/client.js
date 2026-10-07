@@ -31,6 +31,16 @@ export function writeToken(token) {
   }
 }
 
+/**
+ * The business a guest page names in its link (/b/{slug}). Sent as X-Org so
+ * the API answers for that business; cleared on every other route, so the
+ * console never sends it.
+ */
+let publicOrg = null
+export function setPublicOrg(slug) {
+  publicOrg = slug || null
+}
+
 /** Thrown for any non-2xx response, carrying the status so callers can branch. */
 export class ApiError extends Error {
   constructor(status, body) {
@@ -50,6 +60,7 @@ export async function request(path, opts = {}) {
 
   const headers = { Accept: 'application/json' }
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
+  if (publicOrg) headers['X-Org'] = publicOrg
 
   // Guest endpoints are reachable without a session; sending a stale token
   // to them would turn a public read into a 401 for no reason.

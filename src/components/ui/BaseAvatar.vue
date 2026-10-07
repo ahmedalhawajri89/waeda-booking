@@ -22,12 +22,12 @@ const SIZE = {
 // Chosen to stay legible against their own -50/-100 grounds; none of them is
 // the danger red, which has to keep meaning "something is wrong".
 const TINTS = [
-  'bg-primary-100 text-primary-700',
+  'bg-primary-soft text-primary-fg',
   'bg-accent-100 text-accent-700',
   'bg-success-100 text-success-700',
   'bg-warning-100 text-warning-700',
   'bg-info-100 text-info-700',
-  'bg-gray-200 text-gray-700',
+  'bg-border text-fg-muted',
 ]
 
 const initials = computed(() => {

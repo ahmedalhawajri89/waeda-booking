@@ -46,10 +46,10 @@ const emit = defineEmits(['update:modelValue'])
       class="h-10 rounded-[var(--radius-md)] border text-sm font-semibold transition-colors"
       :class="[
         modelValue === slot.startAt
-          ? 'border-primary-600 bg-primary-600 text-white'
+          ? 'border-primary bg-primary text-white'
           : slot.state === 'available'
-            ? 'hover:border-primary-300 hover:bg-primary-50 bg-surface border-gray-200 text-gray-700'
-            : 'cursor-not-allowed border-gray-100 bg-gray-50 text-gray-300 line-through',
+            ? 'hover:border-primary-line hover:bg-primary-soft bg-surface border-border text-fg-muted'
+            : 'border-border bg-canvas text-fg-faint cursor-not-allowed line-through',
       ]"
       @click="emit('update:modelValue', slot.startAt)"
     >

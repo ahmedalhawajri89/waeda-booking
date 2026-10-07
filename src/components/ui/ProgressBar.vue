@@ -15,10 +15,10 @@ const props = defineProps({
 const pct = computed(() => Math.max(0, Math.min(100, Math.round(props.value))))
 
 const FILL = {
-  primary: 'bg-primary-600',
-  success: 'bg-success-700',
-  warning: 'bg-warning-700',
-  danger: 'bg-danger-700',
+  primary: 'bg-primary',
+  success: 'bg-success-600',
+  warning: 'bg-warning-600',
+  danger: 'bg-danger-600',
 }
 
 const resolved = computed(() => {

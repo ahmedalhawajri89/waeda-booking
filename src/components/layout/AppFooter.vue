@@ -1,68 +1,70 @@
-﻿<script setup>
-import { Calendar } from 'lucide-vue-next'
+<script setup>
+import AppLogo from '@/components/ui/AppLogo.vue'
 
 const year = new Date().getFullYear()
+
+const COLUMNS = [
+  {
+    title: 'المنتج',
+    links: [
+      { label: 'كيف يعمل', href: '#how-it-works' },
+      { label: 'حاسبة الغياب', href: '#calculator' },
+      { label: 'الأسعار', href: '#pricing' },
+      { label: 'الأسئلة', href: '#faq' },
+    ],
+  },
+  {
+    title: 'القطاعات',
+    links: [
+      { label: 'العيادات', href: '#sectors' },
+      { label: 'الصالونات', href: '#sectors' },
+      { label: 'مراكز التدريب', href: '#sectors' },
+      { label: 'المطاعم والمقاهي', href: '#sectors' },
+    ],
+  },
+  {
+    title: 'جرّب',
+    links: [
+      { label: 'صفحة الحجز', to: '/book' },
+      { label: 'لوحة التحكم', to: '/login' },
+      { label: 'إنشاء حساب', to: '/register' },
+    ],
+  },
+]
 </script>
 
 <template>
-  <footer class="bg-brand-soft border-primary-100 relative overflow-hidden border-t">
-    <!-- top hairline in the brand gradient -->
-    <div class="bg-brand absolute inset-x-0 top-0 h-1" />
-
-    <div class="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-      <div class="border-primary-100 mb-12 grid gap-12 border-b pb-12 md:grid-cols-4">
-        <div class="col-span-1 md:col-span-2">
-          <div class="mb-6 flex items-center gap-2">
-            <div class="bg-brand shadow-primary-500/25 rounded-xl p-2 shadow-lg">
-              <Calendar class="h-6 w-6 text-white" />
-            </div>
-            <span class="text-2xl font-bold tracking-tight text-gray-900">
-              حجوزات<span class="text-gradient">برو</span>
-            </span>
-          </div>
-          <p class="max-w-sm leading-relaxed text-gray-600">
-            نظام حجز سحابي رائد يساعد الشركات والمتاجر والعيادات على تنظيم مواعيدهم وزيادة كفاءتهم
-            التشغيلية.
+  <footer class="border-border bg-surface border-t">
+    <div class="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
+      <div class="grid gap-10 md:grid-cols-[1.4fr_repeat(3,1fr)]">
+        <div>
+          <AppLogo compact class="mb-4" />
+          <p class="text-fg-subtle max-w-xs text-sm leading-relaxed">
+            نظام حجز مواعيد للمنشآت الخدمية. رابط حجز، تقويم لفريقك، وتذكير يقلّل الغياب.
           </p>
         </div>
-        <div>
-          <h4 class="mb-6 text-lg font-bold text-gray-900">روابط سريعة</h4>
-          <ul class="space-y-4 text-gray-600">
-            <li><a href="#" class="hover:text-primary-600 transition-colors">الرئيسية</a></li>
-            <li>
-              <a href="#features" class="hover:text-primary-600 transition-colors">المميزات</a>
-            </li>
-            <li><a href="#" class="hover:text-primary-600 transition-colors">الأسعار</a></li>
-            <li>
-              <a href="#" class="hover:text-primary-600 transition-colors">الأسئلة الشائعة</a>
+        <nav v-for="c in COLUMNS" :key="c.title" :aria-label="c.title">
+          <p class="text-fg mb-4 text-sm font-bold">{{ c.title }}</p>
+          <ul class="space-y-2.5 text-sm">
+            <li v-for="l in c.links" :key="l.label">
+              <RouterLink
+                v-if="l.to"
+                :to="l.to"
+                class="text-fg-subtle hover:text-fg transition-colors"
+                >{{ l.label }}</RouterLink
+              >
+              <a v-else :href="l.href" class="text-fg-subtle hover:text-fg transition-colors">{{
+                l.label
+              }}</a>
             </li>
           </ul>
-        </div>
-        <div>
-          <h4 class="mb-6 text-lg font-bold text-gray-900">تواصل معنا</h4>
-          <ul class="space-y-4 text-gray-600">
-            <li>
-              <a href="#" class="hover:text-primary-600 transition-colors" dir="ltr">
-                support@bookingpro.com
-              </a>
-            </li>
-            <li>
-              <a href="#" class="hover:text-primary-600 transition-colors" dir="ltr">
-                +966 50 123 4567
-              </a>
-            </li>
-            <li>المملكة العربية السعودية، الرياض</li>
-          </ul>
-        </div>
+        </nav>
       </div>
       <div
-        class="flex flex-col items-center justify-between gap-4 text-sm text-gray-500 md:flex-row"
+        class="border-border text-fg-faint mt-12 flex flex-col items-center justify-between gap-3 border-t pt-6 text-[13px] sm:flex-row"
       >
-        <p>جميع الحقوق محفوظة &copy; {{ year }} حجوزات برو</p>
-        <div class="flex gap-6">
-          <a href="#" class="hover:text-primary-600 transition-colors">سياسة الخصوصية</a>
-          <a href="#" class="hover:text-primary-600 transition-colors">شروط الاستخدام</a>
-        </div>
+        <p>© {{ year }} وعدة</p>
+        <p>صُنع للمنشآت العربية</p>
       </div>
     </div>
   </footer>
