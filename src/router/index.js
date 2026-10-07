@@ -52,6 +52,20 @@ const router = createRouter({
       component: () => import('@/views/RegisterView.vue'),
       meta: { title: 'إنشاء حساب', guestOnly: true },
     },
+    {
+      path: '/forgot-password',
+      name: 'forgot-password',
+      component: () => import('@/views/ForgotPasswordView.vue'),
+      meta: { title: 'استعادة كلمة المرور', guestOnly: true },
+    },
+    {
+      // Not guest-only: the emailed link has to work even in a browser that
+      // is still signed in.
+      path: '/reset-password',
+      name: 'reset-password',
+      component: () => import('@/views/ResetPasswordView.vue'),
+      meta: { title: 'كلمة مرور جديدة' },
+    },
 
     /* ------------------------------------------------------- operator */
     {

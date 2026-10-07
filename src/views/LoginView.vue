@@ -20,7 +20,8 @@ const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 
-const email = ref('')
+// Coming back from a password reset, the address is already known.
+const email = ref(typeof route.query.email === 'string' ? route.query.email : '')
 const password = ref('')
 const showPassword = ref(false)
 const touched = ref(false)
@@ -133,6 +134,11 @@ const DAY = [
               <EyeOff v-if="showPassword" class="h-4 w-4" />
               <Eye v-else class="h-4 w-4" />
             </button>
+            <RouterLink
+              :to="{ path: '/forgot-password', query: email.trim() ? { email: email.trim() } : {} }"
+              class="text-fg-subtle hover:text-fg mt-2 inline-block text-xs font-semibold underline-offset-4 hover:underline"
+              >نسيت كلمة المرور؟</RouterLink
+            >
           </div>
           <button
             type="submit"

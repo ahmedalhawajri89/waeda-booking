@@ -117,6 +117,39 @@ await page.waitForTimeout(500)
 const shown = (await page.getByText('بانتظار التأكيد').count()) > 0
 console.log(refused && shown ? '✓ lookup needs the right phone' : '✗ phone check broken')
 
+// --- a forgotten password, end to end ----------------------------------
+await go('/login', 'login')
+{
+  await page.getByRole('link', { name: 'نسيت كلمة المرور؟' }).click()
+  await page.waitForURL('**/forgot-password**')
+  await page.getByRole('heading', { name: 'نسيت كلمة المرور؟' }).waitFor()
+  await page.getByLabel('البريد الإلكتروني').fill('owner@example.com')
+  await page.getByRole('button', { name: 'أرسل رابط الاستعادة' }).click()
+  await page.getByRole('link', { name: 'افتح رابط الاستعادة' }).click()
+  await page.waitForURL('**/reset-password**')
+  await page.getByRole('heading', { name: 'كلمة مرور جديدة' }).waitFor()
+  const resetUrl = page.url()
+  await page.getByLabel('كلمة المرور الجديدة').fill('waeda2026')
+  await page.getByLabel('أعد كتابتها').fill('waeda2026')
+  await page.getByRole('button', { name: 'احفظ كلمة المرور' }).click()
+  await page.waitForURL('**/login**')
+  await page.getByRole('heading', { name: 'أهلاً بعودتك' }).waitFor()
+  const filled = await page.getByLabel('البريد الإلكتروني').inputValue()
+  // the same link a second time is dead
+  await page.goto(resetUrl)
+  await page.getByRole('heading', { name: 'كلمة مرور جديدة' }).waitFor()
+  await page.getByLabel('كلمة المرور الجديدة').fill('waeda2026')
+  await page.getByLabel('أعد كتابتها').fill('waeda2026')
+  await page.getByRole('button', { name: 'احفظ كلمة المرور' }).click()
+  await page.waitForTimeout(400)
+  const dead = (await page.getByText('الرابط لم يعد صالحاً').count()) > 0
+  console.log(
+    filled === 'owner@example.com' && dead
+      ? '✓ forgot password: link, new password, back to sign-in; the link works once'
+      : `✗ forgot password (email="${filled}", dead link shown=${dead})`,
+  )
+}
+
 // --- sign in ------------------------------------------------------------
 await go('/login', 'login')
 await page.getByRole('button', { name: /ادخل بالحساب التجريبي/ }).click()

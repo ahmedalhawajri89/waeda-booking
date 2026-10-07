@@ -11,6 +11,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -236,6 +237,46 @@ class AuthController extends Controller
                 'email' => $user->email,
             ]);
         }
+    }
+
+    /**
+     * "Send me a link." The answer is the same whether or not the address has
+     * an account, for the reason login answers alike: otherwise this form
+     * becomes a way to find out who uses the product.
+     */
+    public function forgotPassword(Request $request)
+    {
+        $data = $request->validate(['email' => ['required', 'email']]);
+
+        Password::sendResetLink(['email' => $data['email']]);
+
+        return response()->json(['status' => 'sent']);
+    }
+
+    /**
+     * Set a new password from the emailed link. Every token the account holds
+     * is revoked: whoever prompted the reset may be the one still signed in.
+     */
+    public function resetPassword(Request $request)
+    {
+        $data = $request->validate([
+            'token' => ['required', 'string'],
+            'email' => ['required', 'email'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $status = Password::reset($data, function (User $user, string $password) {
+            $user->forceFill(['password' => $password])->save();
+            $user->tokens()->delete();
+        });
+
+        if ($status !== Password::PASSWORD_RESET) {
+            throw ValidationException::withMessages([
+                'token' => ['الرابط منتهي أو غير صالح. اطلب رابطاً جديداً.'],
+            ]);
+        }
+
+        return response()->json(['status' => 'reset']);
     }
 
     public function me(Request $request)

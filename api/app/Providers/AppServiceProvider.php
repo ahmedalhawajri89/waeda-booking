@@ -8,6 +8,8 @@ use App\Channels\MessageChannel;
 use App\Services\Guard\ClaudeUnderstanding;
 use App\Services\Guard\ReplyUnderstanding;
 use App\Services\Guard\RuleUnderstanding;
+use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -34,6 +36,23 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        //
+        // The reset link opens the app's own page, which posts the token back.
+        $link = fn ($user, string $token) => config('app.frontend_url')
+            .'/reset-password?'.http_build_query(['token' => $token, 'email' => $user->getEmailForPasswordReset()]);
+        ResetPassword::createUrlUsing($link);
+
+        ResetPassword::toMailUsing(function ($user, string $token) use ($link) {
+            $url = $link($user, $token);
+            $minutes = config('auth.passwords.'.config('auth.defaults.passwords').'.expire');
+
+            return (new MailMessage)
+                ->subject('إعادة تعيين كلمة المرور · وعدة')
+                ->greeting('أهلاً '.$user->name)
+                ->line('وصلنا طلب لإعادة تعيين كلمة مرور حسابك في وعدة.')
+                ->action('عيّن كلمة مرور جديدة', $url)
+                ->line("الرابط صالح لمدة {$minutes} دقيقة.")
+                ->line('إن لم تطلب ذلك، تجاهل هذه الرسالة وستبقى كلمة مرورك كما هي.')
+                ->salutation('فريق وعدة');
+        });
     }
 }

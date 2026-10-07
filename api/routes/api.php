@@ -58,6 +58,9 @@ Route::prefix('auth')->group(function () {
     // Opening a business: account, business, catalogue and hours in one go.
     Route::post('register-business', [AuthController::class, 'registerBusiness'])->middleware('throttle:5,1');
     Route::get('slug-available', [AuthController::class, 'slugAvailable'])->middleware('throttle:60,1');
+    // A forgotten password: a link by email, then a new password from it.
+    Route::post('forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
+    Route::post('reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:10,1');
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('me', [AuthController::class, 'me']);

@@ -207,6 +207,58 @@ export const useAuthStore = defineStore('auth', () => {
     return r.available
   }
 
+  /* ------------------------------------------------- forgotten password */
+
+  const RESET_KEY = 'bookingpro:reset:v1'
+  const RESET_TTL_MS = 60 * 60_000
+
+  /**
+   * Ask for a reset link. The server answers the same for any address. The
+   * demo sends no mail, so it hands the link back for the page to show —
+   * the same stand-in the guest page uses for its WhatsApp code.
+   */
+  async function requestPasswordReset(email) {
+    if (isDemoBackend) {
+      const token = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) =>
+        b.toString(16).padStart(2, '0'),
+      ).join('')
+      try {
+        localStorage.setItem(
+          RESET_KEY,
+          JSON.stringify({ email, token, expires: Date.now() + RESET_TTL_MS }),
+        )
+      } catch {
+        /* the link below still carries everything */
+      }
+      return { demoLink: `/reset-password?${new URLSearchParams({ token, email })}` }
+    }
+    const { request } = await import('@/data/api/client')
+    await request('/auth/forgot-password', { method: 'POST', body: { email }, auth: false })
+    return {}
+  }
+
+  /** Set the new password from the link. Throws `{ status: 422 }` on a dead link. */
+  async function resetPassword({ token, email, password }) {
+    if (isDemoBackend) {
+      let saved = null
+      try {
+        saved = JSON.parse(localStorage.getItem(RESET_KEY) ?? 'null')
+      } catch {
+        /* treated as no link */
+      }
+      if (!saved || saved.token !== token || saved.email !== email || saved.expires < Date.now())
+        throw Object.assign(new Error('invalid token'), { status: 422 })
+      localStorage.removeItem(RESET_KEY)
+      return
+    }
+    const { request } = await import('@/data/api/client')
+    await request('/auth/reset-password', {
+      method: 'POST',
+      body: { token, email, password, password_confirmation: password },
+      auth: false,
+    })
+  }
+
   async function signOut() {
     const wasSignedIn = user.value !== null
     user.value = null
@@ -234,6 +286,8 @@ export const useAuthStore = defineStore('auth', () => {
     signUp,
     signUpBusiness,
     slugAvailable,
+    requestPasswordReset,
+    resetPassword,
     signOut,
   }
 })
