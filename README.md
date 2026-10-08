@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/cover.png" alt="Booking Management System" width="900">
+  <img src="docs/cover.png" alt="Waeda (وعدة): appointment booking for service businesses" width="900">
 </p>
 
 # Booking Management System
