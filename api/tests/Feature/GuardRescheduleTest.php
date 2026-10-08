@@ -10,7 +10,7 @@ use App\Models\Organization;
 use App\Models\Resource;
 use App\Models\Service;
 use App\Services\BookingWriter;
-use App\Services\Guard\ClaudeUnderstanding;
+use App\Services\Guard\AiUnderstanding;
 use App\Services\Guard\GuardEngine;
 use App\Services\Guard\RuleUnderstanding;
 use GuzzleHttp\Client as Guzzle;
@@ -195,30 +195,30 @@ class GuardRescheduleTest extends TestCase
 
     /* ------------------------------------------------------ the model path */
 
-    /** A Claude client whose HTTP is canned, recording what it was sent. */
-    private function claude(array $responses, array &$sent): ClaudeUnderstanding
+    /** A model client whose HTTP is canned, recording what it was sent. */
+    private function model(array $responses, array &$sent): AiUnderstanding
     {
         $stack = HandlerStack::create(new MockHandler($responses));
         $stack->push(Middleware::history($sent));
         $client = new Client(apiKey: 'test', requestOptions: ['transporter' => new Guzzle(['handler' => $stack]), 'maxRetries' => 0]);
 
-        return new ClaudeUnderstanding($client, new RuleUnderstanding(), 'claude-opus-5-5');
+        return new AiUnderstanding($client, new RuleUnderstanding(), 'test-model');
     }
 
     private static function answer(array $json, string $stop = 'end_turn'): Response
     {
         return new Response(200, ['Content-Type' => 'application/json'], json_encode([
-            'id' => 'msg_test', 'type' => 'message', 'role' => 'assistant', 'model' => 'claude-opus-5-5',
+            'id' => 'msg_test', 'type' => 'message', 'role' => 'assistant', 'model' => 'test-model',
             'content' => [['type' => 'text', 'text' => json_encode($json)]],
             'stop_reason' => $stop, 'stop_sequence' => null,
             'usage' => ['input_tokens' => 10, 'output_tokens' => 10],
         ]));
     }
 
-    public function test_claude_reads_what_the_rules_cannot(): void
+    public function test_the_model_reads_what_the_rules_cannot(): void
     {
         $sent = [];
-        $model = $this->claude([self::answer([
+        $model = $this->model([self::answer([
             'intent' => 'reschedule', 'option' => null, 'day' => '2030-03-07',
             'window_from' => '17:00', 'window_to' => '21:00', 'time' => null,
         ])], $sent);
@@ -228,10 +228,10 @@ class GuardRescheduleTest extends TestCase
         $this->assertSame(['intent' => 'reschedule', 'day' => '2030-03-07', 'window' => [1020, 1260]], $read);
     }
 
-    public function test_claude_is_never_sent_the_customers_name_or_phone(): void
+    public function test_the_model_is_never_sent_the_customers_name_or_phone(): void
     {
         $sent = [];
-        $model = $this->claude([self::answer([
+        $model = $this->model([self::answer([
             'intent' => 'confirm', 'option' => null, 'day' => null, 'window_from' => null, 'window_to' => null, 'time' => null,
         ])], $sent);
 
@@ -251,7 +251,7 @@ class GuardRescheduleTest extends TestCase
     {
         $sent = [];
         // A choice of option 7 when only three were offered.
-        $model = $this->claude([self::answer([
+        $model = $this->model([self::answer([
             'intent' => 'choose', 'option' => 7, 'day' => null, 'window_from' => null, 'window_to' => null, 'time' => null,
         ])], $sent);
 
@@ -263,7 +263,7 @@ class GuardRescheduleTest extends TestCase
     public function test_an_outage_falls_back_to_the_rules(): void
     {
         $sent = [];
-        $model = $this->claude([new Response(529, [], '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}')], $sent);
+        $model = $this->model([new Response(529, [], '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}')], $sent);
 
         $this->assertSame('confirm', $model->understand('أكيد جاي', $this->now)['intent']);
     }

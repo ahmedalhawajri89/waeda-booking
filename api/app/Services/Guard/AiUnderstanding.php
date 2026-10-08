@@ -7,11 +7,11 @@ use Carbon\CarbonInterface;
 use Throwable;
 
 /**
- * Reading a reply with Claude — for everything the word lists cannot: dialect,
+ * Reading a reply with a language model, for everything the word lists cannot: dialect,
  * spelling, "بعد صلاة المغرب", "مو هالأسبوع خليها اللي بعده", two requests in
  * one message.
  *
- * Bound only when ANTHROPIC_API_KEY is set (see AppServiceProvider). It never
+ * Bound only when AI_API_KEY and AI_MODEL are set (see AppServiceProvider). It never
  * makes the guard depend on it: any failure — network, refusal, an answer
  * that does not fit the schema — and the reply is read by the rules instead.
  *
@@ -19,7 +19,7 @@ use Throwable;
  * and the times an open offer listed. Never the customer's name or phone: the
  * model needs neither to read "خليها بكرة".
  */
-class ClaudeUnderstanding implements ReplyUnderstanding
+class AiUnderstanding implements ReplyUnderstanding
 {
     private const INTENTS = ['confirm', 'cancel', 'late', 'reschedule', 'choose', 'unknown'];
 

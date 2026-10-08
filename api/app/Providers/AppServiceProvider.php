@@ -5,7 +5,7 @@ namespace App\Providers;
 use App\Channels\LogChannel;
 use Anthropic\Client;
 use App\Channels\MessageChannel;
-use App\Services\Guard\ClaudeUnderstanding;
+use App\Services\Guard\AiUnderstanding;
 use App\Services\Guard\ReplyUnderstanding;
 use App\Services\Guard\RuleUnderstanding;
 use Illuminate\Auth\Notifications\ResetPassword;
@@ -22,11 +22,11 @@ class AppServiceProvider extends ServiceProvider
             default => new LogChannel(),
         });
 
-        // How replies are read: Claude when a key is configured, word lists
-        // otherwise. ClaudeUnderstanding falls back to the rules itself, so the
+        // How replies are read: a language model when one is configured, word
+        // lists otherwise. AiUnderstanding falls back to the rules itself, so the
         // guard keeps working through any outage on the model's side.
-        $this->app->bind(ReplyUnderstanding::class, fn ($app) => config('guard.ai_key')
-            ? new ClaudeUnderstanding(
+        $this->app->bind(ReplyUnderstanding::class, fn ($app) => config('guard.ai_key') && config('guard.ai_model')
+            ? new AiUnderstanding(
                 new Client(apiKey: config('guard.ai_key')),
                 $app->make(RuleUnderstanding::class),
                 config('guard.ai_model'),

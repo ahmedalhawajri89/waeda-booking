@@ -13,12 +13,10 @@ qa-screenshots/
 test-results/
 playwright-report/
 
-# editors, agents & local artefacts
+# editors & local artefacts
 .idea/
 .vscode/
-.claude/
 .ai/
-CLAUDE.md
 .DS_Store
 Thumbs.db
 

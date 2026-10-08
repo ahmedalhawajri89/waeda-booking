@@ -8,7 +8,7 @@ use Carbon\CarbonInterface;
  * Reads what a customer meant by a reply.
  *
  * Two implementations: RuleUnderstanding (word lists, always available) and
- * ClaudeUnderstanding (a language model, used when an API key is configured,
+ * AiUnderstanding (a language model, used when an API key is configured,
  * falling back to the rules on any failure). The guard depends only on this,
  * so swapping one for the other changes nothing else.
  *
