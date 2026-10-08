@@ -122,15 +122,19 @@ class PublicBookingController extends Controller
             return response()->json([]);
         }
 
-        $from = Carbon::parse($data['from'])->startOfDay();
+        // Days are the business's days, not UTC's: in Riyadh a UTC day starts
+        // at 3 a.m., which hid the first three hours of every evening's bookings.
+        $tz = Organization::query()->whereKey($resource->org_id)->value('timezone') ?? 'UTC';
+        $from = Carbon::parse($data['from'], $tz)->startOfDay();
         // Capped so a caller cannot ask for a decade and make this a scan.
-        $to = Carbon::parse($data['to'])->endOfDay()->min($from->copy()->addDays(60));
+        $to = Carbon::parse($data['to'], $tz)->endOfDay()->min($from->copy()->addDays(60));
 
         $busy = Booking::query()
             ->where('resource_id', $data['resourceId'])
             ->whereIn('status', Booking::BLOCKING)
-            ->where('start_at', '<', $to)
-            ->where('end_at', '>', $from)
+            // Stored in UTC; the builder writes a Carbon's wall clock as-is.
+            ->where('start_at', '<', $to->copy()->utc())
+            ->where('end_at', '>', $from->copy()->utc())
             ->orderBy('start_at')
             ->get(['start_at', 'end_at']);
 
@@ -194,6 +198,9 @@ class PublicBookingController extends Controller
             'status' => $booking->status,
             'paymentStatus' => $booking->payment_status,
             'priceMinor' => $booking->price_minor,
+            // Whether someone at the business has seen it, so the page can say
+            // so instead of leaving the guest to wonder.
+            'acknowledgedAt' => $booking->acknowledged_at?->toIso8601String(),
             'serviceName' => $booking->service->name,
             'customerName' => $booking->customer->name,
             // What the manage page needs to offer other times for the same
@@ -251,12 +258,15 @@ class PublicBookingController extends Controller
         );
 
         $booking = $this->writer->update($booking, ['start_at' => $start]);
+        // A new time the business has not seen yet: it needs seeing again.
+        $booking->forceFill(['acknowledged_at' => null])->save();
 
         return response()->json([
             'reference' => $booking->reference,
             'startAt' => $booking->start_at->toIso8601String(),
             'endAt' => $booking->end_at->toIso8601String(),
             'status' => $booking->status,
+            'acknowledgedAt' => null,
         ]);
     }
 

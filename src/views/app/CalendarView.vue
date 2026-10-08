@@ -5,7 +5,7 @@ import { addDays, format, isSameDay, parseISO, startOfDay, startOfWeek } from 'd
 import { ChevronLeft, ChevronRight, Rows3, Rows4 } from 'lucide-vue-next'
 import { useBookingsStore } from '@/stores/bookings'
 import { fullDate, relativeDay, time } from '@/lib/format'
-import { businessHours, resources } from '@/data/catalog'
+import { schedule, resources } from '@/data/catalog'
 import { useBookingMove } from '@/composables/useBookingMove'
 import { isOpenOn } from '@/lib/availability'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -115,7 +115,7 @@ function openDay(date) {
           <p class="text-fg-subtle text-xs">
             <template v-if="mode === 'week'">{{ weekBookings.length }} حجز هذا الأسبوع</template>
             <template v-else>
-              {{ isOpenOn(businessHours, cursor) ? `${dayBookings.length} حجز` : 'مغلق' }}
+              {{ isOpenOn(schedule, cursor) ? `${dayBookings.length} حجز` : 'مغلق' }}
             </template>
           </p>
         </div>

@@ -123,6 +123,7 @@ class AuthController extends Controller
             'staff' => ['required', 'array', 'min:1', 'max:20'],
             'staff.*.name' => ['required', 'string', 'min:2', 'max:255'],
             'staff.*.role' => ['nullable', 'string', 'max:120'],
+            'staff.*.gender' => ['nullable', 'in:female,male'],
             'services' => ['required', 'array', 'min:1', 'max:30'],
             'services.*.name' => ['required', 'string', 'min:2', 'max:255'],
             'services.*.category' => ['nullable', 'string', 'max:64'],
@@ -132,7 +133,7 @@ class AuthController extends Controller
             'hours' => ['required', 'array', 'size:7'],
             'hours.*.weekday' => ['required', 'integer', 'between:0,6', 'distinct'],
             'hours.*.open' => ['required', 'date_format:H:i'],
-            'hours.*.close' => ['required', 'date_format:H:i'],
+            'hours.*.close' => ['required', 'date_format:H:i', 'different:hours.*.open'],
             'hours.*.isClosed' => ['required', 'boolean'],
         ]);
 
@@ -166,6 +167,7 @@ class AuthController extends Controller
                 'org_id' => $org->id,
                 'name' => $m['name'],
                 'role' => $m['role'] ?? null,
+                'gender' => $m['gender'] ?? null,
                 'is_active' => true,
                 'sort_order' => $i,
             ]));

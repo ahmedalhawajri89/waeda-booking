@@ -1,17 +1,20 @@
 import { computed, ref } from 'vue'
 import { addDays, format, startOfDay } from 'date-fns'
 import { useBookingsStore } from '@/stores/bookings'
-import { businessHours } from '@/data/catalog'
+import { schedule } from '@/data/catalog'
 import { isDemoBackend } from '@/data/repository'
-import { generateSlots, hoursFor } from '@/lib/availability'
+import { generateSlots } from '@/lib/availability'
+import { windowFor } from '@/lib/hours'
 
 /** How far ahead a guest can look, and how far the busy lookup reaches. */
 export const SEARCH_DAYS = 28
 
+/** In the order a day is lived: a late night comes after the evening, not before the morning. */
 export const PERIODS = [
-  { key: 'am', label: 'صباحاً', test: (h) => h < 12 },
+  { key: 'am', label: 'صباحاً', test: (h) => h >= 4 && h < 12 },
   { key: 'noon', label: 'ظهراً', test: (h) => h >= 12 && h < 17 },
   { key: 'pm', label: 'مساءً', test: (h) => h >= 17 },
+  { key: 'late', label: 'بعد منتصف الليل', test: (h) => h < 4 },
 ]
 
 /** Slots split into morning / afternoon / evening, empty periods dropped. */
@@ -52,7 +55,8 @@ export function useGuestAvailability() {
     if (isDemoBackend || !resources.length) return
     const { busyRanges } = await import('@/data/api/public')
     const from = format(new Date(), 'yyyy-MM-dd')
-    const to = format(addDays(new Date(), SEARCH_DAYS), 'yyyy-MM-dd')
+    // A day past the window, for the last evening's hours after midnight.
+    const to = format(addDays(new Date(), SEARCH_DAYS + 1), 'yyyy-MM-dd')
     const next = {}
     await Promise.all(
       resources.map(async (r) => {
@@ -85,7 +89,7 @@ export function useGuestAvailability() {
         service,
         resourceId: r.id,
         bookings: blocking.value,
-        hours: businessHours,
+        hours: schedule,
         excludeBookingId,
       })) {
         const seen = byStart.get(s.startAt)
@@ -105,8 +109,7 @@ export function useGuestAvailability() {
 
   /** Free times on a day for the day picker's dots; -1 when closed. */
   function freeCount(day, q) {
-    const h = hoursFor(businessHours, day)
-    if (!h || h.isClosed) return -1
+    if (!windowFor(day, schedule)) return -1
     if (!q.service) return 1
     return slotsOn(day, q).filter((s) => s.state === 'available').length
   }

@@ -210,7 +210,8 @@ export function applyReply({
         b,
         'rescheduled',
         at,
-        { startAt: target, endAt: end },
+        // The business has not seen the new time yet.
+        { startAt: target, endAt: end, acknowledgedAt: null },
         `أعاد العميل جدولة الحجز من ${dayLabel(b.startAt)} ${time(b.startAt)} إلى ${dayLabel(target)} ${time(target)}`,
       )
       ack = 'ack_rescheduled'
@@ -306,6 +307,8 @@ export function applyOfferReply({
         paymentStatus: 'unpaid',
         priceMinor: service?.priceMinor ?? freed.priceMinor,
         channel: 'online',
+        // Booked by the guard while nobody watched: new to the business.
+        acknowledgedAt: null,
         createdAt: at,
         updatedAt: at,
         history: [

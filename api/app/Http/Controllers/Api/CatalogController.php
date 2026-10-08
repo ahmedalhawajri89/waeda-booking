@@ -9,6 +9,7 @@ use App\Models\Resource;
 use App\Models\Service;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Services, resources and opening hours — everything Settings can edit.
@@ -40,6 +41,7 @@ class CatalogController extends Controller
             ->when($onlyActive, fn ($q) => $q->where('is_active', true))
             ->orderBy('sort_order')->orderBy('name')->orderBy('id')->get();
         $hours = BusinessHour::where('org_id', $org)->orderBy('weekday')->get();
+        $periods = DB::table('special_periods')->where('org_id', $org)->orderBy('starts_on')->get();
 
         return response()->json([
             'business' => [
@@ -64,6 +66,7 @@ class CatalogController extends Controller
                 'id' => $r->id,
                 'name' => $r->name,
                 'role' => $r->role,
+                'gender' => $r->gender,
                 'isActive' => $r->is_active,
             ])->all(),
             'businessHours' => $hours->map(fn (BusinessHour $h) => [
@@ -72,6 +75,15 @@ class CatalogController extends Controller
                 'open' => substr((string) $h->open_time, 0, 5),
                 'close' => substr((string) $h->close_time, 0, 5),
                 'isClosed' => $h->is_closed,
+            ])->all(),
+            // Off when never set; the client fills in its defaults.
+            'prayer' => $business?->prayer_breaks ? json_decode($business->prayer_breaks, true) : null,
+            'specialPeriods' => $periods->map(fn ($p) => [
+                'id' => $p->id,
+                'label' => $p->label,
+                'startsOn' => substr((string) $p->starts_on, 0, 10),
+                'endsOn' => substr((string) $p->ends_on, 0, 10),
+                'hours' => json_decode($p->hours, true),
             ])->all(),
         ]);
     }
@@ -94,6 +106,7 @@ class CatalogController extends Controller
             'resources.*.id' => ['required', 'string'],
             'resources.*.name' => ['required', 'string', 'max:255'],
             'resources.*.role' => ['nullable', 'string', 'max:120'],
+            'resources.*.gender' => ['nullable', 'in:female,male'],
             'business' => ['array'],
             'business.name' => ['sometimes', 'required', 'string', 'min:2', 'max:255'],
             'business.category' => ['nullable', 'string', 'max:64'],
@@ -102,9 +115,37 @@ class CatalogController extends Controller
             'businessHours' => ['array'],
             'businessHours.*.weekday' => ['required', 'integer', 'between:0,6'],
             'businessHours.*.open' => ['required', 'date_format:H:i'],
-            'businessHours.*.close' => ['required', 'date_format:H:i'],
+            // A close before the open is a late night; only the same time twice is no day.
+            'businessHours.*.close' => ['required', 'date_format:H:i', 'different:businessHours.*.open'],
             'businessHours.*.isClosed' => ['required', 'boolean'],
+            'specialPeriods' => ['array', 'max:50'],
+            'specialPeriods.*.id' => ['required', 'uuid'],
+            'specialPeriods.*.label' => ['required', 'string', 'min:2', 'max:80'],
+            'specialPeriods.*.startsOn' => ['required', 'date_format:Y-m-d'],
+            'specialPeriods.*.endsOn' => ['required', 'date_format:Y-m-d', 'after_or_equal:specialPeriods.*.startsOn'],
+            'specialPeriods.*.hours' => ['required', 'array', 'size:7'],
+            'specialPeriods.*.hours.*.weekday' => ['required', 'integer', 'between:0,6'],
+            'specialPeriods.*.hours.*.open' => ['required', 'date_format:H:i'],
+            'specialPeriods.*.hours.*.close' => ['required', 'date_format:H:i'],
+            'specialPeriods.*.hours.*.isClosed' => ['required', 'boolean'],
+            'prayer' => ['nullable', 'array'],
+            'prayer.enabled' => ['required_with:prayer', 'boolean'],
+            'prayer.city' => ['required_with:prayer', 'string', 'in:'.implode(',', array_keys(config('cities')))],
+            'prayer.prayers' => ['array'],
+            'prayer.prayers.*' => ['in:fajr,dhuhr,asr,maghrib,isha', 'distinct'],
+            'prayer.minutes' => ['required_with:prayer', 'integer', 'between:5,90'],
+            'prayer.jumuahMinutes' => ['required_with:prayer', 'integer', 'between:5,120'],
         ]);
+
+        // Two periods on the same date would leave "which hours?" to chance.
+        $periods = collect($data['specialPeriods'] ?? [])->sortBy('startsOn')->values();
+        foreach ($periods as $i => $p) {
+            if ($i > 0 && $p['startsOn'] <= $periods[$i - 1]['endsOn']) {
+                throw ValidationException::withMessages([
+                    'specialPeriods' => ['الفترات الخاصة لا تتداخل: «'.$periods[$i - 1]['label'].'» و«'.$p['label'].'».'],
+                ]);
+            }
+        }
 
         $org = $this->orgId($request);
 
@@ -125,7 +166,7 @@ class CatalogController extends Controller
                 $this->assertNotForeign(Resource::class, $r['id'], $org);
                 Resource::updateOrCreate(
                     ['id' => $r['id']],
-                    ['org_id' => $org, 'name' => $r['name'], 'role' => $r['role'] ?? null, 'is_active' => $r['isActive'], 'sort_order' => $i]
+                    ['org_id' => $org, 'name' => $r['name'], 'role' => $r['role'] ?? null, 'gender' => $r['gender'] ?? null, 'is_active' => $r['isActive'], 'sort_order' => $i]
                 );
             }
 
@@ -152,6 +193,41 @@ class CatalogController extends Controller
                 // The link table is a set, not a row to patch: replacing it is
                 // the only way an unchecked resource actually goes away.
                 $service->resources()->sync($s['resourceIds'] ?? []);
+            }
+
+            if (array_key_exists('prayer', $data)) {
+                DB::table('organizations')->where('id', $org)->update([
+                    'prayer_breaks' => $data['prayer'] === null ? null : json_encode([
+                        'enabled' => (bool) $data['prayer']['enabled'],
+                        'city' => $data['prayer']['city'],
+                        'prayers' => array_values($data['prayer']['prayers'] ?? []),
+                        'minutes' => (int) $data['prayer']['minutes'],
+                        'jumuahMinutes' => (int) $data['prayer']['jumuahMinutes'],
+                    ]),
+                ]);
+            }
+
+            // The list is the whole set: a period left out is a period removed.
+            if (array_key_exists('specialPeriods', $data)) {
+                $ids = collect($data['specialPeriods'])->pluck('id')->all();
+                if (DB::table('special_periods')->whereIn('id', $ids)->where('org_id', '!=', $org)->exists()) {
+                    abort(403);
+                }
+                DB::table('special_periods')->where('org_id', $org)->whereNotIn('id', $ids)->delete();
+                foreach ($data['specialPeriods'] as $p) {
+                    DB::table('special_periods')->updateOrInsert(
+                        ['id' => $p['id']],
+                        [
+                            'org_id' => $org,
+                            'label' => $p['label'],
+                            'starts_on' => $p['startsOn'],
+                            'ends_on' => $p['endsOn'],
+                            'hours' => json_encode(array_values($p['hours'])),
+                            'updated_at' => now(),
+                            'created_at' => now(),
+                        ]
+                    );
+                }
             }
 
             foreach ($data['businessHours'] ?? [] as $h) {

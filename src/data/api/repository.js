@@ -65,6 +65,11 @@ export class ApiRepository {
     )
   }
 
+  /** The business has seen a booking that arrived on its own. */
+  async acknowledgeBooking(id) {
+    return request(`/bookings/${id}/acknowledge`, { method: 'POST' })
+  }
+
   async loadCustomers() {
     return request('/customers')
   }

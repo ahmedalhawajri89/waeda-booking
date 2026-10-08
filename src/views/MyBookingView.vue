@@ -8,11 +8,13 @@ import {
   CalendarPlus,
   CalendarX2,
   Check,
+  CheckCheck,
   Clock,
   MapPin,
   MessageCircle,
   Phone,
   SearchX,
+  Send,
   X,
 } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
@@ -82,6 +84,7 @@ const view = computed(() => {
       id: b.id,
       reference: b.reference,
       status: b.status,
+      acknowledgedAt: b.acknowledgedAt,
       startAt: b.startAt,
       endAt: b.endAt,
       priceMinor: b.priceMinor,
@@ -164,6 +167,19 @@ const STATE = computed(() => {
     title: 'بانتظار التأكيد',
     line: `${relativeDayTime(v.startAt)} · ستصلك رسالة قبل الموعد لتأكيد حضورك.`,
   }
+})
+
+/**
+ * Did it reach them? The commonest complaint about booking apps here is a
+ * confirmation the venue never saw, so the page says plainly which it is.
+ * Only `null` means unseen; older bookings without the field were seen.
+ */
+const RECEIPT = computed(() => {
+  const v = view.value
+  if (!v || !upcoming.value || !['pending', 'confirmed'].includes(v.status)) return null
+  return v.acknowledgedAt === null
+    ? { seen: false, text: `أُرسل إلى ${business.name}. تظهر هنا علامة الاستلام فور اطلاعهم عليه.` }
+    : { seen: true, text: `وصل حجزك إلى ${business.name}` }
 })
 
 /* ---------------------------------------------------------- keep it */
@@ -253,11 +269,17 @@ async function saveMove() {
   saving.value = true
   try {
     if (isDemoBackend) {
-      if (!bookings.reschedule(v.id, newStart.value)) throw { status: 409 }
+      if (bookings.move(v.id, { startAt: newStart.value }, { byGuest: true }) !== true)
+        throw { status: 409 }
     } else {
       const { rescheduleBooking } = await import('@/data/api/public')
       const moved = await rescheduleBooking(v.reference, phone.value, newStart.value)
-      remote.value = { ...remote.value, startAt: moved.startAt, endAt: moved.endAt }
+      remote.value = {
+        ...remote.value,
+        startAt: moved.startAt,
+        endAt: moved.endAt,
+        acknowledgedAt: null,
+      }
     }
     moving.value = false
     toast.success(`نُقل موعدك إلى ${relativeDayTime(newStart.value)}`)
@@ -384,6 +406,16 @@ function moveInstead() {
           <div>
             <h1 class="font-display text-fg text-xl font-bold">{{ STATE.title }}</h1>
             <p class="text-fg-muted mt-0.5 text-sm" data-numeric>{{ STATE.line }}</p>
+            <p
+              v-if="RECEIPT"
+              class="mt-2 flex items-start gap-1.5 text-xs leading-5 font-semibold"
+              :class="RECEIPT.seen ? 'text-success-700' : 'text-fg-subtle'"
+              data-receipt
+            >
+              <CheckCheck v-if="RECEIPT.seen" class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <Send v-else class="mt-1 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              {{ RECEIPT.text }}
+            </p>
           </div>
         </div>
 

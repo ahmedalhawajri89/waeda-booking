@@ -79,9 +79,30 @@ const conflicted = computed(() => (booking.value ? hasConflict(booking.value, st
 
 /* --------------------------------------------------------------- tabs */
 const tab = ref('details')
+
+/**
+ * A guest's booking nobody had opened is seen the moment it is opened — the
+ * guest's page then says it reached the business. The tag stays for this
+ * visit so whoever opened it knows it was new.
+ */
+const arrivedNew = ref(false)
 watch(
   () => props.bookingId,
-  () => (tab.value = 'details'),
+  () => {
+    tab.value = 'details'
+    arrivedNew.value = false
+  },
+)
+// On the booking, not the id: a link opened before the list has loaded has
+// an id long before it has a booking to look at.
+watch(
+  () => booking.value?.id,
+  (id) => {
+    if (!id) return
+    arrivedNew.value = booking.value.acknowledgedAt === null
+    if (arrivedNew.value) store.acknowledge(id)
+  },
+  { immediate: true },
 )
 const thread = computed(() => (booking.value ? guard.thread(booking.value.id) : []))
 const TABS = computed(() => [
@@ -172,8 +193,6 @@ const moreItems = computed(() => {
   const b = booking.value
   if (!b) return []
   const items = [{ value: 'copy', label: 'نسخ رقم الحجز', icon: Copy }]
-  if (b.status === 'confirmed' && hasStarted.value)
-    items.push({ value: 'no_show', label: 'لم يحضر', icon: UserX, separated: true })
   if (b.paymentStatus === 'paid')
     items.push({ value: 'refund', label: 'إعادة المبلغ', icon: Undo2, separated: true })
   if (live.value)
@@ -311,6 +330,11 @@ const CHANNEL = { online: 'من صفحة الحجز', phone: 'حجز هاتفي'
         <StatusBadge :payment="booking.paymentStatus" />
         <RiskBadge v-if="live && risk && risk.tier !== 'low'" :risk="risk" />
         <span
+          v-if="arrivedNew"
+          class="bg-primary-soft text-primary-fg inline-flex items-center rounded-[var(--radius-sm)] px-2 py-1 text-xs font-semibold"
+          >جديد من صفحة الحجز</span
+        >
+        <span
           v-if="conflicted"
           class="border-danger-100 bg-danger-50 text-danger-700 inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-2 py-1 text-xs font-semibold"
         >
@@ -353,11 +377,8 @@ const CHANNEL = { online: 'من صفحة الحجز', phone: 'حجز هاتفي'
             @click="setStatus('completed', 'اكتملت الخدمة')"
             >حضر واكتمل</BaseButton
           >
-          <BaseButton
-            v-if="booking.status === 'pending'"
-            :icon="Check"
-            @click="setStatus('confirmed', 'تم تأكيد الحجز')"
-            >تأكيد</BaseButton
+          <BaseButton :icon="UserX" @click="setStatus('no_show', 'سُجّل عدم الحضور')"
+            >لم يحضر</BaseButton
           >
           <BaseButton :icon="CalendarClock" @click="rescheduleOpen = true">إعادة جدولة</BaseButton>
         </template>

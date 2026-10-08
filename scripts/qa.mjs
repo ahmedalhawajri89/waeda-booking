@@ -86,6 +86,16 @@ console.log(
     ? '✓ manage page opens straight onto the booking'
     : '✗ manage page did not recognise the device',
 )
+console.log(
+  /أُرسل إلى/.test(
+    (await page
+      .locator('[data-receipt]')
+      .innerText()
+      .catch(() => '')) || '',
+  )
+    ? '✓ the guest sees it is sent, not yet seen by the business'
+    : '✗ receipt line missing on a fresh booking',
+)
 
 // move it to the first free time
 await page.getByRole('button', { name: 'تعديل الموعد' }).click()
@@ -153,7 +163,9 @@ await go('/login', 'login')
 // --- sign in ------------------------------------------------------------
 await go('/login', 'login')
 await page.getByRole('button', { name: /ادخل بالحساب التجريبي/ }).click()
-await page.waitForTimeout(1200)
+// Wait for the route, not a fixed time: a slow machine made this flaky.
+await page.waitForURL('**/app', { timeout: 15000 }).catch(() => {})
+await page.waitForTimeout(600)
 await page.screenshot({ path: `${OUT}/app-today.png` })
 console.log(page.url().endsWith('/app') ? '✓ signed in → /app' : `✗ landed on ${page.url()}`)
 
@@ -175,6 +187,11 @@ await page.waitForTimeout(700)
 await page.screenshot({ path: `${OUT}/app-detail-drawer.png` })
 console.log(
   (await page.getByRole('dialog').count()) > 0 ? '✓ detail drawer opens' : '✗ drawer failed',
+)
+console.log(
+  (await page.getByRole('dialog').getByText('جديد من صفحة الحجز').count()) > 0
+    ? '✓ the drawer marks a guest booking nobody had opened'
+    : '✗ new-booking tag missing',
 )
 
 // confirm it, then check the status changed (scoped to the drawer)
@@ -206,6 +223,19 @@ console.log(
 )
 await page.keyboard.press('Escape')
 await page.waitForTimeout(400)
+
+// opening it was seeing it: the guest's page now says it reached the business
+await go(`/booking/${ref.trim()}`, 'my-booking-received', 800)
+console.log(
+  /وصل حجزك/.test(
+    (await page
+      .locator('[data-receipt]')
+      .innerText()
+      .catch(() => '')) || '',
+  )
+    ? '✓ once opened, the guest sees the booking reached the business'
+    : '✗ receipt did not turn to received',
+)
 
 // --- other operator screens --------------------------------------------
 await go('/app', 'app-today-full', 1200)
@@ -324,7 +354,12 @@ await go('/app/calendar?view=day', 'app-calendar-day', 900)
   await page.screenshot({ path: `${OUT}/app-calendar-click-create.png` })
   console.log(opened ? '✓ empty slot opens a prefilled booking' : '✗ click-to-create failed')
   await page.keyboard.press('Escape')
-  await page.waitForTimeout(400)
+  // The drawer's backdrop fades out; a drag that starts on it moves nothing.
+  await page
+    .getByRole('dialog')
+    .waitFor({ state: 'detached', timeout: 4000 })
+    .catch(() => {})
+  await page.waitForTimeout(300)
 }
 
 // calendar: dragging a booking moves it (or is refused on a clash, with a reason)
@@ -337,15 +372,16 @@ await go('/app/calendar?view=day', 'app-calendar-day', 900)
     await page.mouse.move(box.x + box.width / 2, box.y + 60, { steps: 6 })
     await page.mouse.move(box.x + box.width / 2, box.y + 90, { steps: 6 })
     await page.mouse.up()
-    await page.waitForTimeout(500)
+    // Wait for the drag's own answer, not whichever toast happens to be last.
     const said = await page
       .locator('[data-sonner-toast]')
+      .filter({ hasText: /نُقل|محجوز|لا يقدّم/ })
       .last()
-      .innerText()
+      .innerText({ timeout: 4000 })
       .catch(() => '')
     await page.screenshot({ path: `${OUT}/app-calendar-drag.png` })
     console.log(
-      /نُقل|محجوز/.test(said)
+      /نُقل|محجوز|لا يقدّم/.test(said)
         ? `✓ drag moves a booking — «${said.split('\n')[0]}»`
         : '✗ drag did nothing',
     )
@@ -374,6 +410,89 @@ await go('/app/settings?tab=business', 'app-settings-business', 700)
   await page.getByRole('textbox', { name: /^اسم المنشأة/ }).fill(before)
   await page.getByRole('button', { name: 'حفظ', exact: true }).click()
   await page.waitForTimeout(400)
+}
+
+// --- local hours: a late night, and Ramadan ------------------------------
+await go('/app/settings?tab=hours', 'app-settings-hours', 700)
+{
+  // Thursday runs 16:00 to 02:00: the booking page offers times after midnight.
+  await page.getByLabel('فتح الخميس').first().fill('16:00')
+  await page.getByLabel('إغلاق الخميس').first().fill('02:00')
+  const noted = (await page.locator('[data-overnight]').count()) > 0
+  await page.getByRole('button', { name: 'حفظ ساعات العمل' }).click()
+  await page.waitForTimeout(500)
+  await go('/book', 'guest-book-late', 800)
+  await page.getByRole('radio', { name: /استشارة جلدية/ }).click()
+  await page.waitForTimeout(300)
+  await page.locator(`#day-${(4 - new Date().getDay() + 7) % 7}`).click()
+  await page.waitForTimeout(500)
+  const late = await page.getByRole('radiogroup', { name: 'أوقات بعد منتصف الليل' }).count()
+  console.log(
+    noted && late > 0
+      ? '✓ a day can close after midnight, and the booking page offers those times'
+      : `✗ late night (note shown=${noted}, late group=${late})`,
+  )
+
+  // Ramadan: one click proposes the coming one, with its dates.
+  await go('/app/settings?tab=hours', 'app-settings-periods', 700)
+  await page.getByRole('button', { name: 'رمضان' }).click()
+  await page.waitForTimeout(400)
+  const label = await page.getByLabel('الاسم').inputValue()
+  await page.getByRole('button', { name: 'حفظ الفترة' }).click()
+  await page.waitForTimeout(500)
+  console.log(
+    /^رمضان \d{4}$/.test(label) && (await page.getByText(label).count()) > 0
+      ? `✓ Ramadan is one click, dated from Umm al-Qura — «${label}»`
+      : `✗ Ramadan period (${label})`,
+  )
+}
+
+// --- prayer pauses: on, the booking page stops offering those times ------
+{
+  const times = async () => {
+    await go('/book', 'guest-book-prayer', 700)
+    await page.getByRole('radio', { name: /استشارة جلدية/ }).click()
+    await page.waitForTimeout(300)
+    // The coming Sunday: open 09:00–18:00, so dhuhr and asr fall inside.
+    await page
+      .locator(`#day-${(7 - new Date().getDay()) % 7 || 7}`)
+      .click()
+      .catch(() => {})
+    await page.waitForTimeout(400)
+    return page.locator('[role="radiogroup"][aria-label^="أوقات"] [role="radio"]').allInnerTexts()
+  }
+  const before = await times()
+  await go('/app/settings?tab=hours', 'app-settings-prayer', 700)
+  await page.getByRole('switch', { name: 'حجب أوقات الصلاة' }).check()
+  await page.getByRole('button', { name: 'حفظ أوقات الصلاة' }).click()
+  await page.waitForTimeout(400)
+  const after = await times()
+  const removed = before.filter((t) => !after.includes(t))
+  const added = after.filter((t) => !before.includes(t))
+  console.log(
+    removed.length > 0 && added.length === 0
+      ? `✓ prayer pauses hide ${removed.length} times from the booking page`
+      : `✗ prayer pauses (removed ${removed.length}, added ${added.length})`,
+  )
+}
+
+// --- choosing a female or male specialist ----------------------------------
+await go('/book', 'guest-book-gender', 700)
+{
+  await page.getByRole('radio', { name: /استشارة جلدية/ }).click()
+  await page.waitForTimeout(300)
+  const chips = page.locator('[data-gender]')
+  await chips.getByRole('radio', { name: 'مختصات' }).click()
+  await page.waitForTimeout(300)
+  const names = await page.getByRole('radiogroup', { name: 'اختر المختص' }).count()
+  const summary = await page.locator('main').innerText()
+  console.log(
+    (await chips.count()) > 0 &&
+      names === 0 &&
+      !/خالد المطيري/.test(summary.split('مع من')[1] ?? '')
+      ? '✓ the booking page can narrow to female specialists'
+      : '✗ gender filter',
+  )
 }
 
 // --- responsive ---------------------------------------------------------

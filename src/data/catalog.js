@@ -1,6 +1,7 @@
 import { reactive } from 'vue'
 import { iconFor } from '@/lib/icons'
 import { applyBusiness } from './business'
+import { DEFAULT_PRAYER } from './cities'
 
 /**
  * The business's own configuration: what it sells, on what, and when.
@@ -25,6 +26,8 @@ import { applyBusiness } from './business'
  * @property {ServiceRow[]} services
  * @property {import('@/types').Resource[]} resources
  * @property {import('@/types').BusinessHours[]} businessHours
+ * @property {import('@/lib/hours').SpecialPeriod[]} [specialPeriods]
+ * @property {typeof DEFAULT_PRAYER} [prayer]
  */
 
 /**
@@ -34,8 +37,20 @@ import { applyBusiness } from './business'
  * and the seeded bookings refer to s1–s3 and r1–r2.
  */
 export const DEFAULT_RESOURCES = [
-  { id: 'r1', name: 'د. سارة العتيبي', role: 'أخصائية جلدية وتجميل', isActive: true },
-  { id: 'r2', name: 'د. خالد المطيري', role: 'استشاري جلدية وليزر', isActive: true },
+  {
+    id: 'r1',
+    name: 'د. سارة العتيبي',
+    role: 'أخصائية جلدية وتجميل',
+    gender: 'female',
+    isActive: true,
+  },
+  {
+    id: 'r2',
+    name: 'د. خالد المطيري',
+    role: 'استشاري جلدية وليزر',
+    gender: 'male',
+    isActive: true,
+  },
 ]
 
 export const DEFAULT_SERVICES = [
@@ -99,6 +114,17 @@ export const toService = (row) => {
 export const services = reactive(DEFAULT_SERVICES.map(toService))
 export const resources = reactive(structuredClone(DEFAULT_RESOURCES))
 export const businessHours = reactive(structuredClone(DEFAULT_HOURS))
+/** Ramadan, Eid, a holiday: dates whose hours replace the week's. */
+export const specialPeriods = reactive([])
+
+/**
+ * Everything that decides when the business is open, in one object — what
+ * src/lib/hours.js reads. Pass this, not `businessHours`, so a special period
+ * is never forgotten by one screen and honoured by another.
+ */
+/** Prayer pauses: off until the owner turns them on. */
+export const prayer = reactive({ ...DEFAULT_PRAYER })
+export const schedule = reactive({ hours: businessHours, specialPeriods, prayer })
 
 /** Replaces contents in place, so importers keep their reference.
  * @param {CatalogSnapshot} snapshot */
@@ -107,6 +133,8 @@ export function applyCatalog(snapshot) {
   services.splice(0, services.length, ...snapshot.services.map(toService))
   resources.splice(0, resources.length, ...snapshot.resources)
   businessHours.splice(0, businessHours.length, ...snapshot.businessHours)
+  specialPeriods.splice(0, specialPeriods.length, ...(snapshot.specialPeriods ?? []))
+  Object.assign(prayer, DEFAULT_PRAYER, snapshot.prayer ?? {})
 }
 
 export function serviceById(id) {

@@ -5,6 +5,7 @@ import {
   CircleDotDashed,
   Clock,
   CheckCircle2,
+  Inbox,
   TriangleAlert,
   Undo2,
   UserX,
@@ -42,7 +43,8 @@ export const PAYMENT_STATUS = {
 /** @type {Record<import('@/types').AttentionReason, StatusMeta>} */
 export const ATTENTION = {
   conflict: { label: 'تعارض في المواعيد', icon: TriangleAlert, tone: 'danger' },
-  overdue_completion: { label: 'انتهى وقته ولم يُغلق', icon: Clock, tone: 'warning' },
+  overdue_completion: { label: 'انتهى وقته: هل حضر؟', icon: Clock, tone: 'warning' },
+  unacknowledged: { label: 'حجز جديد لم يُستلم بعد', icon: Inbox, tone: 'warning' },
   pending_soon: { label: 'بانتظار التأكيد وموعده قريب', icon: Clock, tone: 'warning' },
   unpaid_imminent: { label: 'غير مدفوع وموعده خلال ساعتين', icon: CircleDashed, tone: 'warning' },
 }

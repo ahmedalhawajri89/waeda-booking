@@ -174,6 +174,8 @@ class GuardRescheduleTest extends TestCase
             ['لا، خلّيها بكرة', ['intent' => 'reschedule', 'day' => '2030-03-06']],
             ['خلّيها الثلاثاء', ['intent' => 'reschedule', 'day' => '2030-03-12']],
             ['بدي وقت ثاني', ['intent' => 'reschedule']],
+            ['3', ['intent' => 'reschedule']],
+            ['٣', ['intent' => 'reschedule']],
             ['10 دقائق', ['intent' => 'unknown']],
         ];
     }

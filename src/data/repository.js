@@ -20,6 +20,7 @@ import { addDays, format } from 'date-fns'
  * @property {() => Promise<import('@/types').Booking[]>} loadBookings
  * @property {(booking: import('@/types').Booking) => Promise<import('@/types').Booking>} createBooking Stores a new booking under the id the client chose and returns it as saved — with the reference the backend issued. Idempotent: the same id twice returns the first.
  * @property {(booking: import('@/types').Booking) => Promise<import('@/types').Booking>} updateBooking Saves one existing booking and returns it as stored.
+ * @property {(id: string) => Promise<import('@/types').Booking>} acknowledgeBooking Marks a booking seen by the business; the first time is kept.
  * @property {() => Promise<import('@/types').Customer[]>} loadCustomers
  * @property {(customers: import('@/types').Customer[]) => Promise<void>} saveCustomers
  * @property {() => Promise<import('./catalog').CatalogSnapshot>} loadCatalog Services, resources and opening hours — everything Settings can edit.
@@ -278,6 +279,21 @@ class LocalRepository {
     return booking
   }
 
+  /** The business has seen a booking that arrived on its own. First time kept. */
+  async acknowledgeBooking(id) {
+    const all = read(KEY_BOOKINGS) ?? []
+    const b = all.find((x) => x.id === id)
+    if (!b) throw new Error('booking not found')
+    if (!b.acknowledgedAt) {
+      const next = all.map((x) =>
+        x.id === id ? { ...x, acknowledgedAt: new Date().toISOString() } : x,
+      )
+      LocalRepository.#commit(next, all)
+      return next.find((x) => x.id === id)
+    }
+    return b
+  }
+
   async loadCustomers() {
     this.#ensureFresh()
     return delay(read(KEY_CUSTOMERS) ?? seedCustomers)
@@ -320,7 +336,12 @@ class LocalRepository {
       bookings: read(KEY_BOOKINGS) ?? [],
       customers: read(KEY_CUSTOMERS) ?? seedCustomers,
       services: read(KEY_CATALOG)?.services ?? DEFAULT_SERVICES,
-      hours: read(KEY_CATALOG)?.businessHours ?? DEFAULT_HOURS,
+      // The whole schedule, so offers respect late nights and special periods.
+      hours: {
+        hours: read(KEY_CATALOG)?.businessHours ?? DEFAULT_HOURS,
+        specialPeriods: read(KEY_CATALOG)?.specialPeriods ?? [],
+        prayer: read(KEY_CATALOG)?.prayer ?? null,
+      },
       waitlist: read(KEY_WAITLIST) ?? [],
       messages: read(KEY_MESSAGES) ?? [],
     }
@@ -509,6 +530,7 @@ export const repository = {
   loadBookings: () => active.loadBookings(),
   createBooking: (b) => active.createBooking(b),
   updateBooking: (b) => active.updateBooking(b),
+  acknowledgeBooking: (id) => active.acknowledgeBooking(id),
   loadCustomers: () => active.loadCustomers(),
   saveCustomers: (c) => active.saveCustomers(c),
   loadCatalog: () => active.loadCatalog(),

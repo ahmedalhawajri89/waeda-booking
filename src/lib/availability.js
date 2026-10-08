@@ -1,5 +1,6 @@
-import { addMinutes, isBefore, set, startOfDay } from 'date-fns'
+import { addMinutes, isBefore } from 'date-fns'
 import { time } from './format'
+import { rowFor, windowFor } from './hours'
 
 /** Statuses that occupy their slot. Cancelled and no-show release the time. */
 const BLOCKING = new Set(['pending', 'confirmed'])
@@ -9,28 +10,23 @@ const BLOCKING = new Set(['pending', 'confirmed'])
  * and made today's occupancy fall as appointments were closed out. */
 const OCCUPYING = new Set([...BLOCKING, 'completed'])
 
-function parseHm(base, hm) {
-  const [h, m] = hm.split(':').map(Number)
-  return set(startOfDay(base), { hours: h ?? 0, minutes: m ?? 0 })
-}
-
 /** Half-open overlap: touching edges do not collide. */
 export function overlaps(aStart, aEnd, bStart, bEnd) {
   return aStart < bEnd && bStart < aEnd
 }
 
 /**
- * @param {import('@/types').BusinessHours[]} hours
+ * The hours in force on this date — a special period's, else the week's.
+ * @param {import('./hours').Schedule} hours
  * @param {Date} date
  * @returns {import('@/types').BusinessHours | undefined}
  */
 export function hoursFor(hours, date) {
-  return hours.find((h) => h.weekday === date.getDay())
+  return rowFor(hours, date)
 }
 
 export function isOpenOn(hours, date) {
-  const h = hoursFor(hours, date)
-  return !!h && !h.isClosed
+  return windowFor(date, hours) !== null
 }
 
 /**
@@ -53,11 +49,11 @@ export function generateSlots(opts) {
   const { date, service, resourceId, bookings, hours, stepMin = 30, excludeBookingId } = opts
   const now = opts.now ?? new Date()
 
-  const dayHours = hoursFor(hours, date)
-  if (!dayHours || dayHours.isClosed) return []
+  // The business day that starts on `date`, which may run past midnight.
+  const w = windowFor(date, hours)
+  if (!w) return []
 
-  const open = parseHm(date, dayHours.open)
-  const close = parseHm(date, dayHours.close)
+  const { open, close } = w
   const occupied = service.durationMin + service.bufferMin
 
   const relevant = bookings.filter(
@@ -74,6 +70,12 @@ export function generateSlots(opts) {
     const start = cursor
     const end = addMinutes(start, occupied)
 
+    // A prayer pause is not booked time, it is no time at all: left out,
+    // like the hours the business is closed, rather than shown as taken.
+    if (w.breaks.some((b) => overlaps(start, end, b.start, b.end))) {
+      cursor = addMinutes(cursor, stepMin)
+      continue
+    }
     const taken = relevant.some((b) => overlaps(start, end, new Date(b.startAt), new Date(b.endAt)))
 
     slots.push({
@@ -111,11 +113,10 @@ export function hasConflict(candidate, bookings) {
  * @returns {{ bookedMin: number, openMin: number, ratio: number }}
  */
 export function occupancyFor(date, bookings, hours) {
-  const dayHours = hoursFor(hours, date)
-  if (!dayHours || dayHours.isClosed) return { bookedMin: 0, openMin: 0, ratio: 0 }
+  const w = windowFor(date, hours)
+  if (!w) return { bookedMin: 0, openMin: 0, ratio: 0 }
 
-  const open = parseHm(date, dayHours.open)
-  const close = parseHm(date, dayHours.close)
+  const { open, close } = w
   const openMin = (close.getTime() - open.getTime()) / 60000
 
   const bookedMin = bookings

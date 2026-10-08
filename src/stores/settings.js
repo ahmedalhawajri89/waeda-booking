@@ -1,7 +1,14 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { repository } from '@/data/repository'
-import { applyCatalog, businessHours, resources, services } from '@/data/catalog'
+import {
+  applyCatalog,
+  businessHours,
+  prayer,
+  resources,
+  services,
+  specialPeriods,
+} from '@/data/catalog'
 import { business } from '@/data/business'
 import { uid } from '@/lib/id'
 
@@ -42,6 +49,8 @@ export const useSettingsStore = defineStore('settings', () => {
       })),
       resources: resources.map((r) => ({ ...r })),
       businessHours: businessHours.map((h) => ({ ...h })),
+      specialPeriods: specialPeriods.map((p) => ({ ...p, hours: p.hours.map((h) => ({ ...h })) })),
+      prayer: { ...prayer, prayers: [...prayer.prayers] },
     }
   }
 
@@ -130,7 +139,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   function newResource() {
-    return { id: uid('r_'), name: '', role: '', isActive: true }
+    return { id: uid('r_'), name: '', role: '', gender: null, isActive: true }
   }
 
   function toggleResource(id) {
@@ -161,6 +170,23 @@ export const useSettingsStore = defineStore('settings', () => {
     persist()
   }
 
+  /**
+   * Ramadan, Eid, a holiday: the whole list, replaced. Kept in date order so
+   * the screen and the server read them the same way.
+   * @param {import('@/lib/hours').SpecialPeriod[]} next
+   */
+  function savePeriods(next) {
+    const sorted = [...next].sort((a, b) => a.startsOn.localeCompare(b.startsOn))
+    specialPeriods.splice(0, specialPeriods.length, ...sorted)
+    persist()
+  }
+
+  /** Prayer pauses: on or off, the city, which prayers, for how long. */
+  function savePrayer(next) {
+    Object.assign(prayer, next, { prayers: [...next.prayers] })
+    persist()
+  }
+
   const activeServices = computed(() => services.filter((s) => s.isActive))
   const activeResources = computed(() => resources.filter((r) => r.isActive))
 
@@ -179,6 +205,8 @@ export const useSettingsStore = defineStore('settings', () => {
     newResource,
     toggleResource,
     saveHours,
+    savePeriods,
+    savePrayer,
     saveBusiness,
   }
 })

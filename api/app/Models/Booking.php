@@ -24,7 +24,32 @@ class Booking extends Model
             'start_at' => 'datetime',
             'end_at' => 'datetime',
             'price_minor' => 'integer',
+            'acknowledged_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Someone at the business has a booking only when they made it. One that
+     * came from the public page, or that the guard filled from the waitlist,
+     * waits for the business to see it.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (Booking $b) {
+            if ($b->acknowledged_at === null && $b->channel !== 'online') {
+                $b->acknowledged_at = now();
+            }
+        });
+    }
+
+    /** The business has seen it. Idempotent: the first time is the one kept. */
+    public function acknowledge(): self
+    {
+        if ($this->acknowledged_at === null) {
+            $this->forceFill(['acknowledged_at' => now()])->save();
+        }
+
+        return $this;
     }
 
     public function events()

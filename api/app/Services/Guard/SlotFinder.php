@@ -4,9 +4,9 @@ namespace App\Services\Guard;
 
 use App\Models\Booking;
 use App\Models\Organization;
+use App\Services\Hours;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Times a booking could move to — findOptions() in src/lib/guardBackend.js,
@@ -20,6 +20,10 @@ use Illuminate\Support\Facades\DB;
 class SlotFinder
 {
     private const STEP = 30;
+
+    public function __construct(private Hours $hours)
+    {
+    }
 
     /**
      * @param  array{day?: string, window?: array{int, int}, time?: int}  $wish
@@ -76,14 +80,14 @@ class SlotFinder
     /** @return list<Carbon> free starts on one local day, in order */
     private function free(Booking $b, Carbon $day, CarbonInterface $now, string $tz): array
     {
-        $hours = DB::table('business_hours')->where('org_id', $b->org_id)
-            ->where('weekday', (int) $day->format('w'))->first();
-        if (! $hours || $hours->is_closed) {
+        // The business day starting on $day, which may close after midnight.
+        $w = $this->hours->windowFor($b->org_id, $day);
+        if (! $w) {
             return [];
         }
 
-        $open = Carbon::parse($day->format('Y-m-d').' '.$hours->open_time, $tz);
-        $close = Carbon::parse($day->format('Y-m-d').' '.$hours->close_time, $tz);
+        $open = $w['open']->copy();
+        $close = $w['close']->copy();
         $length = $b->service->occupiedMinutes();
 
         $busy = Booking::query()
@@ -100,7 +104,8 @@ class SlotFinder
             if ($s->lt($now) || $s->equalTo($b->start_at)) {
                 continue;
             }
-            $taken = $busy->contains(fn ($x) => $s->lt($x->end_at) && $x->start_at->lt($e));
+            $taken = $busy->contains(fn ($x) => $s->lt($x->end_at) && $x->start_at->lt($e))
+                || collect($w['breaks'])->contains(fn ($x) => $s->lt($x['end']) && $x['start']->lt($e));
             if (! $taken) {
                 $out[] = $s->copy()->utc();
             }

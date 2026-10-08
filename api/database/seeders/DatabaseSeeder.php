@@ -46,11 +46,11 @@ class DatabaseSeeder extends Seeder
         $operator->save();
 
         $rooms = collect([
-            ['id' => (string) Str::uuid(), 'name' => 'د. سارة العتيبي'],
-            ['id' => (string) Str::uuid(), 'name' => 'د. خالد المطيري'],
+            ['id' => (string) Str::uuid(), 'name' => 'د. سارة العتيبي', 'gender' => 'female'],
+            ['id' => (string) Str::uuid(), 'name' => 'د. خالد المطيري', 'gender' => 'male'],
         ])->map(fn ($r, $i) => Resource::firstOrCreate(
             ['org_id' => $org->id, 'name' => $r['name']],
-            ['id' => $r['id'], 'is_active' => true, 'sort_order' => $i]
+            ['id' => $r['id'], 'gender' => $r['gender'], 'is_active' => true, 'sort_order' => $i]
         ));
 
         $services = collect([

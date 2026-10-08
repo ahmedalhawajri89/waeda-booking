@@ -10,7 +10,7 @@ import DateStrip from './DateStrip.vue'
 import TimeSlotGrid from './TimeSlotGrid.vue'
 import { useBookingsStore } from '@/stores/bookings'
 import { useCustomersStore } from '@/stores/customers'
-import { bookableResources, bookableServices, businessHours, services } from '@/data/catalog'
+import { bookableResources, bookableServices, schedule, services } from '@/data/catalog'
 import { generateSlots } from '@/lib/availability'
 import { money, duration } from '@/lib/format'
 import { isConflict } from '@/data/errors'
@@ -82,7 +82,7 @@ const slots = computed(() =>
     service: service.value,
     resourceId: resourceId.value,
     bookings: bookings.items,
-    hours: businessHours,
+    hours: schedule,
     excludeBookingId: props.rescheduleId ?? undefined,
   }),
 )
@@ -98,7 +98,7 @@ function firstOpenDay() {
       service: service.value,
       resourceId: resourceId.value,
       bookings: bookings.items,
-      hours: businessHours,
+      hours: schedule,
     }).some((s) => s.state === 'available')
     if (open) return day
   }

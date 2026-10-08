@@ -149,6 +149,8 @@ class GuardEngine
             try {
                 // Under the resource lock: an offered time is not a held one.
                 $this->writer->update($b, ['start_at' => $target]);
+                // The customer moved it; the business has not seen the new time.
+                $b->forceFill(['acknowledged_at' => null])->save();
                 $ack = 'ack_rescheduled';
             } catch (BookingConflict) {
                 $offerOut = $this->slots->find($b, ['day' => $target->copy()->setTimezone($tz)->format('Y-m-d')], $now);

@@ -20,6 +20,9 @@ class MessageTemplates
         'ack_confirm', 'ack_cancel', 'ack_handoff', 'reschedule_offer', 'ack_rescheduled', 'no_slots',
     ];
 
+    /** Every message about a booking ends the same way, so a reply is one key. */
+    private const REPLY_MENU = 'للتأكيد أرسل 1، ولموعد آخر 3، وللإلغاء 2.';
+
     public function __construct(private string $tz, private CarbonInterface $now)
     {
     }
@@ -32,8 +35,8 @@ class MessageTemplates
         $when = $this->relativeDay($b->start_at).' الساعة '.$this->time($b->start_at);
 
         return match ($template) {
-            'reminder' => "مرحباً {$first}، نذكّرك بموعد {$service} {$when}. نراك قريباً!",
-            'confirm_request' => "مرحباً {$first}، موعدك {$service} {$when}.\nللتأكيد أرسل 1، وللإلغاء أرسل 2.",
+            'reminder' => "مرحباً {$first}، نذكّرك بموعد {$service} {$when}.\n".self::REPLY_MENU,
+            'confirm_request' => "مرحباً {$first}، موعدك {$service} {$when}.\n".self::REPLY_MENU,
             'deposit_request' => 'لتثبيت موعدك '.$this->dayLabel($b->start_at).' نرجو دفع عربون '.$this->money(self::deposit($b->price_minor)).' — سيرسل لك فريقنا رابط الدفع.',
             'release_notice' => 'لم يصلنا تأكيدك، فأُتيح موعد '.$this->time($b->start_at).' لعميل آخر. يسعدنا حجز موعد جديد لك في أي وقت.',
             'ack_confirm' => "تم تأكيد موعدك، نراك {$when} ✅",

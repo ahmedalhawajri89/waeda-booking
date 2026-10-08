@@ -83,6 +83,9 @@ export function understandReply(text, ctx = {}) {
     }
   }
 
+  // The menu every message offers: 1 confirm, 2 cancel, 3 another time.
+  if (t === '3') return { intent: 'reschedule' }
+
   const when = readWhen(t, now)
   if (CHANGE.test(t)) return { intent: 'reschedule', ...when }
   if (CANCEL.test(t)) return { intent: 'cancel' }

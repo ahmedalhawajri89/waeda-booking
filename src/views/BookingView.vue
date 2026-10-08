@@ -75,7 +75,28 @@ const returning = ref(rememberedGuest())
 
 const offered = computed(() => bookableServices())
 const service = computed(() => services.find((s) => s.id === serviceId.value) ?? null)
-const people = computed(() => bookableResources(service.value))
+const allPeople = computed(() => bookableResources(service.value))
+
+/**
+ * Seen by a woman, or by a man. Many customers choose, and a women's salon
+ * is staffed by women; offered only when the service has both, so a
+ * one-gender team never shows a filter that changes nothing.
+ */
+const gender = ref('any')
+const mixed = computed(() => new Set(allPeople.value.map((p) => p.gender).filter(Boolean)).size > 1)
+const people = computed(() =>
+  gender.value === 'any' || !mixed.value
+    ? allPeople.value
+    : allPeople.value.filter((p) => p.gender === gender.value),
+)
+watch(people, (list) => {
+  if (who.value !== ANY && !list.some((p) => p.id === who.value)) who.value = ANY
+})
+const GENDERS = [
+  { value: 'any', label: 'الكل' },
+  { value: 'female', label: 'مختصات' },
+  { value: 'male', label: 'مختصون' },
+]
 
 /** Services the way the business sells them: by category, then by name. */
 const categories = computed(() => [...new Set(offered.value.map((s) => s.category ?? 'الخدمات'))])
@@ -97,7 +118,7 @@ const avail = useGuestAvailability()
 const query = computed(() => ({ service: service.value, resources: candidates.value }))
 const slots = computed(() => avail.slotsOn(date.value, query.value))
 const freeCount = (day) => avail.freeCount(day, query.value)
-const loadBusy = () => avail.loadBusy(people.value)
+const loadBusy = () => avail.loadBusy(allPeople.value)
 const grouped = computed(() => groupByPeriod(slots.value))
 const dayIsFull = computed(
   () => slots.value.length > 0 && !slots.value.some((s) => s.state === 'available'),
@@ -292,6 +313,7 @@ async function book() {
         paymentStatus: 'unpaid',
         channel: 'online',
         notes: notes.value.trim() || undefined,
+        byGuest: true,
       })
       reference.value = created.reference
       booked.value = { startAt: created.startAt, endAt: created.endAt }
@@ -652,7 +674,23 @@ const dayTitle = computed(() =>
             v-else
             class="border-border bg-surface space-y-6 rounded-[var(--radius-lg)] border p-4 sm:p-5"
           >
-            <!-- who -->
+            <!-- who: by gender first, when the team has both -->
+            <div v-if="mixed" role="radiogroup" aria-label="المختص" class="flex gap-1" data-gender>
+              <button
+                v-for="g in GENDERS"
+                :key="g.value"
+                type="button"
+                role="radio"
+                :aria-checked="gender === g.value"
+                class="rounded-full px-3 py-1 text-xs font-semibold transition-colors"
+                :class="
+                  gender === g.value ? 'bg-surface-sunken text-fg' : 'text-fg-subtle hover:text-fg'
+                "
+                @click="gender = g.value"
+              >
+                {{ g.label }}
+              </button>
+            </div>
             <div v-if="people.length > 1">
               <p class="text-fg-muted mb-2 text-[13px] font-semibold">مع من؟</p>
               <div role="radiogroup" aria-label="اختر المختص" class="flex flex-wrap gap-2">

@@ -32,6 +32,7 @@ class BookingController extends Controller
             'paymentStatus' => $b->payment_status,
             'priceMinor' => $b->price_minor,
             'channel' => $b->channel,
+            'acknowledgedAt' => $b->acknowledged_at?->toIso8601String(),
             'notes' => $b->notes,
             'createdAt' => $b->created_at?->toIso8601String(),
             'updatedAt' => $b->updated_at?->toIso8601String(),
@@ -143,14 +144,24 @@ class BookingController extends Controller
         $start = Carbon::parse($data['startAt']);
         // No past-time rule here, unlike the public form: an operator records
         // walk-ins and phone bookings after the fact.
-        $this->rules->withinHours($org, $start, $start->copy()->addMinutes($service->occupiedMinutes()));
+        $this->rules->withinHours($org, $start, $start->copy()->addMinutes($service->occupiedMinutes()), false);
 
         $booking = $this->writer->create(
             ['org_id' => $org, 'id' => $data['id'] ?? null] + $this->toInput($data),
             $request->user()->id,
         );
+        // Made at the desk, so seen at the desk, whatever channel it records.
+        $booking->acknowledge();
 
         return response()->json(self::toDomain($booking), 201);
+    }
+
+    /** "Got it": the business has seen a booking that arrived on its own. */
+    public function acknowledge(Request $request, string $id)
+    {
+        $booking = Booking::with('events')->where('org_id', $this->orgId($request))->findOrFail($id);
+
+        return response()->json(self::toDomain($booking->acknowledge()));
     }
 
     /** Change one booking: any subset of its fields. */
@@ -188,10 +199,12 @@ class BookingController extends Controller
             // A service switched off since booking can still be moved; only a
             // new choice of service has to be one that is on offer.
             $service = $this->rules->service($org, $serviceId, $resourceId, $serviceId !== $booking->service_id);
-            $this->rules->withinHours($org, $start, $start->copy()->addMinutes($service->occupiedMinutes()));
+            $this->rules->withinHours($org, $start, $start->copy()->addMinutes($service->occupiedMinutes()), false);
         }
 
         $saved = $this->writer->update($booking, $this->toInput($data), $request->user()->id);
+        // Acting on a booking is the clearest sign of having seen it.
+        $saved->acknowledge();
 
         return response()->json(self::toDomain($saved));
     }

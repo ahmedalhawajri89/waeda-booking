@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { addDays, format, isSameDay, startOfDay } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import { isOpenOn } from '@/lib/availability'
-import { businessHours } from '@/data/catalog'
+import { schedule } from '@/data/catalog'
 
 /** Horizontal day picker. A radiogroup, so arrow keys work as expected. */
 const props = defineProps({
@@ -21,7 +21,7 @@ const dates = computed(() =>
 )
 
 function isDisabled(d) {
-  if (!isOpenOn(businessHours, d)) return true
+  if (!isOpenOn(schedule, d)) return true
   return !props.allowPast && d < today
 }
 

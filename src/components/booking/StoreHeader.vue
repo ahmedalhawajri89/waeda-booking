@@ -1,30 +1,27 @@
 <script setup>
 import { computed } from 'vue'
-import { format } from 'date-fns'
 import { MapPin } from 'lucide-vue-next'
 import AppLogo from '@/components/ui/AppLogo.vue'
 import { business } from '@/data/business'
-import { businessHours } from '@/data/catalog'
-import { hoursFor } from '@/lib/availability'
+import { schedule } from '@/data/catalog'
+import { openAt, windowFor } from '@/lib/hours'
 import { time } from '@/lib/format'
 
 /**
  * The business at the top of every guest page: who, what, open or not, where.
  * The guest is on the business's page; the platform signs it quietly above.
+ * "Open now" asks last night's hours too: at 1 a.m. a café open till 2 is.
  */
-const todayHours = computed(() => hoursFor(businessHours, new Date()))
-const openNow = computed(() => {
-  const h = todayHours.value
-  if (!h || h.isClosed) return false
-  const now = format(new Date(), 'HH:mm')
-  return now >= h.open && now < h.close
-})
-const at = (hm) => time(`${format(new Date(), 'yyyy-MM-dd')}T${hm}:00`)
+const current = computed(() => openAt(new Date(), schedule))
+const openNow = computed(() => current.value !== null)
 const hoursLine = computed(() => {
-  const h = todayHours.value
-  if (!h || h.isClosed) return 'مغلق اليوم'
-  return openNow.value ? `مفتوح الآن حتى ${at(h.close)}` : `يفتح ${at(h.open)}`
+  if (current.value) return `مفتوح الآن حتى ${time(current.value.close)}`
+  const today = windowFor(new Date(), schedule)
+  if (!today) return 'مغلق اليوم'
+  return today.open > new Date() ? `يفتح ${time(today.open)}` : 'أغلق لهذا اليوم'
 })
+/** A special period in force (Ramadan, a holiday) is worth saying out loud. */
+const period = computed(() => windowFor(new Date(), schedule)?.period ?? null)
 </script>
 
 <template>
@@ -55,6 +52,12 @@ const hoursLine = computed(() => {
               />
               {{ hoursLine }}
             </span>
+            <span
+              v-if="period"
+              class="bg-primary-soft text-primary-fg rounded-[var(--radius-sm)] px-2 py-0.5 text-xs font-semibold"
+              data-period
+              >{{ period.label }}</span
+            >
             <a
               :href="business.mapsUrl"
               target="_blank"

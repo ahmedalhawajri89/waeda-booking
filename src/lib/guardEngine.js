@@ -147,14 +147,17 @@ export { interpretReply, understandReply } from './replyRules'
  * @param {{ name: string, service: string, startAt: string, depositMinor?: number,
  *           options?: string[], fallback?: boolean }} ctx
  */
+/** Every message about a booking ends the same way, so a reply is one key. */
+const REPLY_MENU = 'للتأكيد أرسل 1، ولموعد آخر 3، وللإلغاء 2.'
+
 export function render(template, ctx) {
   const first = ctx.name.split(' ')[0]
   const when = `${relativeDay(ctx.startAt)} الساعة ${time(ctx.startAt)}`
   switch (template) {
     case 'reminder':
-      return `مرحباً ${first}، نذكّرك بموعد ${ctx.service} ${when}. نراك قريباً!`
+      return `مرحباً ${first}، نذكّرك بموعد ${ctx.service} ${when}.\n${REPLY_MENU}`
     case 'confirm_request':
-      return `مرحباً ${first}، موعدك ${ctx.service} ${when}.\nللتأكيد أرسل 1، وللإلغاء أرسل 2.`
+      return `مرحباً ${first}، موعدك ${ctx.service} ${when}.\n${REPLY_MENU}`
     case 'deposit_request':
       return `لتثبيت موعدك ${dayLabel(ctx.startAt)} نرجو دفع عربون ${money(ctx.depositMinor ?? 0)} — سيرسل لك فريقنا رابط الدفع.`
     case 'release_notice':

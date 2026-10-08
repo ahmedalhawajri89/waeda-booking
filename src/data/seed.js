@@ -520,7 +520,8 @@ function generateSpecs(now) {
     if (!hours || hours.isClosed) continue
 
     const open = toMin(hours.open)
-    const close = toMin(hours.close)
+    // A late day closes the next morning.
+    const close = toMin(hours.close) + (hours.close <= hours.open ? 24 * 60 : 0)
     const progress = (dayOffset + HISTORY_DAYS) / HISTORY_DAYS
     const density =
       (dayOffset < 0 ? 0.42 + 0.33 * progress : Math.max(0.15, 0.6 - dayOffset * 0.035)) *
@@ -650,6 +651,15 @@ export function buildSeedBookings(now = new Date()) {
       paymentStatus: spec.paymentStatus,
       priceMinor: service.priceMinor,
       channel: spec.channel,
+      // A guest's booking from the last day, still ahead and unconfirmed, has
+      // not been opened yet — so the demo shows what "new, unseen" looks like.
+      acknowledgedAt:
+        spec.channel === 'online' &&
+        spec.status === 'pending' &&
+        start.getTime() > Date.now() &&
+        Date.now() - new Date(createdAt).getTime() < 24 * 3600_000
+          ? null
+          : createdAt,
       notes: spec.notes,
       createdAt,
       updatedAt: createdAt,

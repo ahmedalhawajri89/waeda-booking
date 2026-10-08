@@ -89,6 +89,7 @@ Route::middleware(['auth:sanctum', EnsureOperator::class])->group(function () {
     // here and created duplicates — see BookingController::store.
     Route::post('bookings', [BookingController::class, 'store']);
     Route::patch('bookings/{id}', [BookingController::class, 'update']);
+    Route::post('bookings/{id}/acknowledge', [BookingController::class, 'acknowledge']);
     Route::put('customers', [CustomerController::class, 'bulkUpdate']);
     Route::put('catalog', [CatalogController::class, 'update']);
 

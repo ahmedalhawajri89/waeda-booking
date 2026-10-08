@@ -21,6 +21,9 @@ describe('understandReply — moving an appointment', () => {
     ['الساعة 10 ص', { intent: 'reschedule', time: 10 * H }],
     ['لا، خلّيها بكرة', { intent: 'reschedule', day: '2030-03-06' }],
     ['بدي وقت ثاني', { intent: 'reschedule' }],
+    // The menu every message ends with: 1 confirm, 2 cancel, 3 another time.
+    ['3', { intent: 'reschedule' }],
+    ['٣', { intent: 'reschedule' }],
   ])('%s', (text, expected) => {
     expect(read(text)).toEqual(expected)
   })

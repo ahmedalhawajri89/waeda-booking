@@ -34,7 +34,9 @@ function shade(count) {
   return `color-mix(in oklab, var(--color-primary-600) ${15 + (count / max.value) * 85}%, transparent)`
 }
 
-function hourLabel(h) {
+function hourLabel(hour) {
+  // Past midnight on a late day: hour 25 is 1 a.m.
+  const h = hour % 24
   const suffix = h < 12 ? 'ص' : 'م'
   const h12 = h % 12 === 0 ? 12 : h % 12
   return `${h12}${suffix}`

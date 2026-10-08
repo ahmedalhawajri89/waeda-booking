@@ -29,6 +29,8 @@ import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseTabs from '@/components/ui/BaseTabs.vue'
 import ErrorState from '@/components/ui/ErrorState.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import SpecialPeriodsPanel from '@/components/settings/SpecialPeriodsPanel.vue'
+import PrayerPanel from '@/components/settings/PrayerPanel.vue'
 import GuardPolicyForm from '@/components/guard/GuardPolicyForm.vue'
 import { useRoute } from 'vue-router'
 
@@ -194,11 +196,11 @@ function startHours() {
 startHours()
 
 function commitHours() {
-  // A day that opens after it closes would make generateSlots return nothing,
-  // silently — better to refuse it here than to debug an empty grid later.
-  const bad = draftHours.value.find((h) => !h.isClosed && h.close <= h.open)
+  // A close before the open is a late night (16:00 to 02:00) and fine. The
+  // same time twice is not a day at all, and would offer nothing, silently.
+  const bad = draftHours.value.find((h) => !h.isClosed && h.close === h.open)
   if (bad) {
-    toast.error(`${WEEKDAYS[bad.weekday]}: وقت الإغلاق يجب أن يكون بعد وقت الفتح`)
+    toast.error(`${WEEKDAYS[bad.weekday]}: وقت الإغلاق لا يساوي وقت الفتح`)
     return
   }
   settings.saveHours(draftHours.value.map((h) => ({ ...h })))
@@ -405,58 +407,69 @@ async function resetData() {
         </section>
 
         <!-- ---------------------------------------------------------- hours -->
-        <section v-else-if="tab === 'hours'" class="surface overflow-hidden">
-          <header class="border-border border-b px-4 py-3">
-            <h2 class="text-fg text-sm font-bold">ساعات العمل</h2>
-            <p class="text-fg-subtle mt-0.5 text-xs">
-              الأوقات المعروضة للعملاء تُحسب من هنا مباشرةً.
-            </p>
-          </header>
+        <div v-else-if="tab === 'hours'" class="space-y-5">
+          <section class="surface overflow-hidden">
+            <header class="border-border border-b px-4 py-3">
+              <h2 class="text-fg text-sm font-bold">ساعات العمل</h2>
+              <p class="text-fg-subtle mt-0.5 text-xs">
+                الأوقات المعروضة للعملاء تُحسب من هنا مباشرةً.
+              </p>
+            </header>
 
-          <ul class="divide-border divide-y">
-            <li
-              v-for="h in draftHours"
-              :key="h.weekday"
-              class="flex flex-wrap items-center gap-3 px-4 py-2.5"
-            >
-              <span class="text-fg w-20 shrink-0 text-sm">{{ WEEKDAYS[h.weekday] }}</span>
+            <ul class="divide-border divide-y">
+              <li
+                v-for="h in draftHours"
+                :key="h.weekday"
+                class="flex flex-wrap items-center gap-3 px-4 py-2.5"
+              >
+                <span class="text-fg w-20 shrink-0 text-sm">{{ WEEKDAYS[h.weekday] }}</span>
 
-              <label class="text-fg-muted flex items-center gap-2 text-xs">
-                <input v-model="h.isClosed" type="checkbox" class="accent-primary h-4 w-4" />
-                مغلق
-              </label>
+                <label class="text-fg-muted flex items-center gap-2 text-xs">
+                  <input v-model="h.isClosed" type="checkbox" class="accent-primary h-4 w-4" />
+                  مغلق
+                </label>
 
-              <!-- The pair stays one unit: a row that wraps between a time and its
+                <!-- The pair stays one unit: a row that wraps between a time and its
                dash reads as two broken halves, not as a range. -->
-              <div v-if="!h.isClosed" class="ms-auto flex items-center gap-2">
-                <input
-                  v-model="h.open"
-                  type="time"
-                  :aria-label="`فتح ${WEEKDAYS[h.weekday]}`"
-                  class="border-border bg-surface text-fg focus:border-primary h-9 min-w-0 rounded-[var(--radius-md)] border px-2 text-sm focus:outline-none"
-                  dir="ltr"
-                />
-                <span class="text-fg-subtle">–</span>
-                <input
-                  v-model="h.close"
-                  type="time"
-                  :aria-label="`إغلاق ${WEEKDAYS[h.weekday]}`"
-                  class="border-border bg-surface text-fg focus:border-primary h-9 min-w-0 rounded-[var(--radius-md)] border px-2 text-sm focus:outline-none"
-                  dir="ltr"
-                />
-              </div>
-            </li>
-          </ul>
+                <div v-if="!h.isClosed" class="ms-auto flex items-center gap-2">
+                  <input
+                    v-model="h.open"
+                    type="time"
+                    :aria-label="`فتح ${WEEKDAYS[h.weekday]}`"
+                    class="border-border bg-surface text-fg focus:border-primary h-9 min-w-0 rounded-[var(--radius-md)] border px-2 text-sm focus:outline-none"
+                    dir="ltr"
+                  />
+                  <span class="text-fg-subtle">–</span>
+                  <input
+                    v-model="h.close"
+                    type="time"
+                    :aria-label="`إغلاق ${WEEKDAYS[h.weekday]}`"
+                    class="border-border bg-surface text-fg focus:border-primary h-9 min-w-0 rounded-[var(--radius-md)] border px-2 text-sm focus:outline-none"
+                    dir="ltr"
+                  />
+                </div>
+                <p
+                  v-if="!h.isClosed && h.close < h.open"
+                  class="text-fg-subtle basis-full text-end text-xs"
+                  data-overnight
+                >
+                  يغلق بعد منتصف الليل، فجر اليوم التالي
+                </p>
+              </li>
+            </ul>
 
-          <footer class="border-border flex items-center justify-end gap-2 border-t px-4 py-3">
-            <BaseButton variant="ghost" :disabled="!hoursDirty" @click="startHours"
-              >تراجع</BaseButton
-            >
-            <BaseButton variant="primary" :disabled="!hoursDirty" @click="commitHours">
-              حفظ ساعات العمل
-            </BaseButton>
-          </footer>
-        </section>
+            <footer class="border-border flex items-center justify-end gap-2 border-t px-4 py-3">
+              <BaseButton variant="ghost" :disabled="!hoursDirty" @click="startHours"
+                >تراجع</BaseButton
+              >
+              <BaseButton variant="primary" :disabled="!hoursDirty" @click="commitHours">
+                حفظ ساعات العمل
+              </BaseButton>
+            </footer>
+          </section>
+          <PrayerPanel />
+          <SpecialPeriodsPanel />
+        </div>
 
         <!-- ------------------------------------------------------ resources -->
         <section v-else-if="tab === 'resources'" class="surface overflow-hidden">
@@ -625,6 +638,34 @@ async function resetData() {
           placeholder="مثلاً: أخصائية بشرة"
           hint="تظهر لعملائك عند اختيار مع من يحجزون."
         />
+        <fieldset>
+          <legend class="text-fg-muted mb-1.5 text-[13px] font-semibold">المختص</legend>
+          <div class="flex gap-2" role="radiogroup" aria-label="المختص">
+            <button
+              v-for="g in [
+                { value: 'female', label: 'امرأة' },
+                { value: 'male', label: 'رجل' },
+                { value: null, label: 'لا يُعرض' },
+              ]"
+              :key="String(g.value)"
+              type="button"
+              role="radio"
+              :aria-checked="(editingResource.gender ?? null) === g.value"
+              class="rounded-[var(--radius-md)] border px-3 py-2 text-sm font-semibold"
+              :class="
+                (editingResource.gender ?? null) === g.value
+                  ? 'border-fg bg-fg text-canvas'
+                  : 'border-border text-fg-muted hover:bg-surface-hover'
+              "
+              @click="editingResource.gender = g.value"
+            >
+              {{ g.label }}
+            </button>
+          </div>
+          <p class="text-fg-subtle mt-1.5 text-xs">
+            إن كان في فريقك رجال ونساء، يستطيع العميل اختيار «مختصات» أو «مختصون» عند الحجز.
+          </p>
+        </fieldset>
       </div>
       <template #footer>
         <BaseButton variant="ghost" @click="editingResource = null">إلغاء</BaseButton>

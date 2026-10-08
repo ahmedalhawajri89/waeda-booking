@@ -19,7 +19,8 @@ import KpiCard from '@/components/analytics/KpiCard.vue'
 import BaseChart from '@/components/analytics/BaseChart.vue'
 import DemandHeatmap from '@/components/analytics/DemandHeatmap.vue'
 import { useBookingsStore } from '@/stores/bookings'
-import { businessHours, resourceById, serviceById } from '@/data/catalog'
+import { schedule, resourceById, serviceById } from '@/data/catalog'
+import { weekSpan } from '@/lib/hours'
 import { initialOf } from '@/data/business'
 import { chartColors } from '@/composables/useChartTheme'
 import { duration, money } from '@/lib/format'
@@ -63,7 +64,7 @@ const range = computed(() => {
 
 onMounted(() => store.load())
 
-const kpis = computed(() => computeKpis(store.items, range.value, businessHours))
+const kpis = computed(() => computeKpis(store.items, range.value, schedule))
 const series = computed(() => dailySeries(store.items, range.value))
 const channels = computed(() => byChannel(store.items, range.value))
 const statuses = computed(() => byStatus(store.items, range.value))
@@ -79,9 +80,13 @@ const team = computed(() => {
   }))
 })
 
-const FROM_HOUR = 8
-const TO_HOUR = 20
-const heatmap = computed(() => demandHeatmap(store.items, range.value, FROM_HOUR, TO_HOUR))
+// The rows follow the business's own hours, late nights included.
+const span = computed(() => weekSpan(schedule) ?? { fromHour: 8, toHour: 20 })
+const FROM_HOUR = computed(() => span.value.fromHour)
+const TO_HOUR = computed(() => span.value.toHour)
+const heatmap = computed(() =>
+  demandHeatmap(store.items, range.value, FROM_HOUR.value, TO_HOUR.value, schedule),
+)
 
 const pct = (n) => `${Math.round(n * 100)}%`
 

@@ -3,11 +3,9 @@
 namespace App\Services;
 
 use App\Exceptions\InvalidBooking;
-use App\Models\Organization;
 use App\Models\Resource;
 use App\Models\Service;
 use Carbon\CarbonInterface;
-use Illuminate\Support\Facades\DB;
 
 /**
  * What makes a booking possible at all, independent of who is asking.
@@ -19,6 +17,10 @@ use Illuminate\Support\Facades\DB;
  */
 class BookingRules
 {
+    public function __construct(private Hours $hours)
+    {
+    }
+
     /**
      * The service, if it belongs to the org and runs on the resource.
      *
@@ -51,44 +53,25 @@ class BookingRules
         }
     }
 
-    /** @throws InvalidBooking */
-    public function withinHours(string $org, CarbonInterface $start, CarbonInterface $end): void
+    /**
+     * The desk may book into a prayer pause — a customer standing at the
+     * counter is not turned away by a rule meant for the booking page.
+     *
+     * @throws InvalidBooking
+     */
+    public function withinHours(string $org, CarbonInterface $start, CarbonInterface $end, bool $respectBreaks = true): void
     {
-        if (! $this->isWithinHours($org, $start, $end)) {
+        if (! $this->hours->isWithinHours($org, $start, $end, $respectBreaks)) {
             throw new InvalidBooking('outside_business_hours', 'That time is outside opening hours.');
         }
     }
 
     /**
-     * The same rule isOpenOn()/generateSlots() apply on the client, enforced
-     * where the client cannot be trusted. Weekday and wall-clock time only mean
-     * something in the organization's own zone, so instants are converted first.
+     * The same rule generateSlots() applies on the client, enforced where the
+     * client cannot be trusted — late nights and special periods included.
      */
     public function isWithinHours(string $org, CarbonInterface $start, CarbonInterface $end): bool
     {
-        $tz = Organization::query()->whereKey($org)->value('timezone');
-        if (! $tz) {
-            return false;
-        }
-
-        $localStart = $start->copy()->setTimezone($tz);
-        $localEnd = $end->copy()->setTimezone($tz);
-
-        // A booking that crosses midnight cannot sit inside one day's hours.
-        if (! $localStart->isSameDay($localEnd)) {
-            return false;
-        }
-
-        $hours = DB::table('business_hours')
-            ->where('org_id', $org)
-            ->where('weekday', (int) $localStart->format('w'))
-            ->first();
-
-        if (! $hours || $hours->is_closed) {
-            return false;
-        }
-
-        return $localStart->format('H:i:s') >= $hours->open_time
-            && $localEnd->format('H:i:s') <= $hours->close_time;
+        return $this->hours->isWithinHours($org, $start, $end);
     }
 }

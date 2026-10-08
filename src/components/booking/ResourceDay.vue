@@ -1,11 +1,11 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { addMinutes, differenceInMinutes, isSameDay, startOfDay } from 'date-fns'
+import { addMinutes, differenceInMinutes } from 'date-fns'
 import { GripVertical, Plus } from 'lucide-vue-next'
 import { useBookingsStore } from '@/stores/bookings'
-import { businessHours } from '@/data/catalog'
+import { schedule } from '@/data/catalog'
 import { initialOf } from '@/data/business'
-import { hoursFor } from '@/lib/availability'
+import { windowFor } from '@/lib/hours'
 import { assignLanes } from '@/lib/lanes'
 import { BOOKING_STATUS, bookingTone } from '@/lib/status'
 import { time, timeRange } from '@/lib/format'
@@ -42,14 +42,10 @@ const dayBookings = computed(() => store.onDay(props.date))
  * a manual late booking still has to be visible to be dealt with.
  */
 const bounds = computed(() => {
-  const h = hoursFor(businessHours, props.date)
-  const day = startOfDay(props.date)
-  const at = (hm) => {
-    const [hh, mm] = hm.split(':').map(Number)
-    return new Date(day.getFullYear(), day.getMonth(), day.getDate(), hh, mm)
-  }
-  let open = h && !h.isClosed ? at(h.open) : null
-  let close = h && !h.isClosed ? at(h.close) : null
+  // The business day, which may close after midnight.
+  const w = windowFor(props.date, schedule)
+  let open = w?.open ?? null
+  let close = w?.close ?? null
   for (const b of dayBookings.value) {
     const s = new Date(b.startAt)
     const e = new Date(b.endAt)
@@ -60,10 +56,22 @@ const bounds = computed(() => {
   // Whole hours either side, so the rail starts and ends on a label.
   open = new Date(open.getFullYear(), open.getMonth(), open.getDate(), open.getHours())
   if (close.getMinutes() > 0) close = addMinutes(close, 60 - close.getMinutes())
-  return { open, close, totalMin: differenceInMinutes(close, open), closedToday: !h || h.isClosed }
+  return { open, close, totalMin: differenceInMinutes(close, open), closedToday: !w }
 })
 
 const px = (min) => min * props.scale
+
+/** Prayer pauses, drawn across every column so a booking is not put there. */
+const pauses = computed(() => {
+  const b = bounds.value
+  const w = windowFor(props.date, schedule)
+  if (!b || !w) return []
+  return w.breaks.map((p) => ({
+    label: p.label,
+    top: px(differenceInMinutes(p.start, b.open)),
+    height: px(differenceInMinutes(p.end, p.start)),
+  }))
+})
 const ticks = computed(() => {
   const b = bounds.value
   if (!b) return []
@@ -76,7 +84,7 @@ const ticks = computed(() => {
 
 const nowTop = computed(() => {
   const b = bounds.value
-  if (!b || !isSameDay(props.date, new Date())) return null
+  if (!b) return null
   const m = differenceInMinutes(now.value, b.open)
   return m < 0 || m > b.totalMin ? null : px(m)
 })
@@ -263,6 +271,17 @@ const gridStyle = computed(() => ({
             :class="t.label ? 'border-border' : 'border-border/60 border-dashed'"
             :style="{ top: `${t.top}px` }"
           />
+
+          <!-- prayer pauses -->
+          <div
+            v-for="p in pauses"
+            :key="p.label + p.top"
+            class="bg-surface-sunken border-border text-fg-faint pointer-events-none absolute inset-x-0 flex items-start justify-end border-y border-dashed px-1.5 pt-0.5 text-[10px]"
+            :style="{ top: `${p.top}px`, height: `${p.height}px` }"
+            data-pause
+          >
+            <span v-if="i === 0 && p.height > 14">{{ p.label }}</span>
+          </div>
 
           <!-- the time under the pointer, offered -->
           <div

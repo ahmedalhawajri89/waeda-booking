@@ -1,5 +1,6 @@
 import { eachDayOfInterval, format, isWithinInterval, startOfDay, endOfDay } from 'date-fns'
 import { occupancyFor } from './availability'
+import { businessDayOf, sameBusinessDay } from './hours'
 
 /**
  * Every figure the analytics screen shows, as pure functions over the
@@ -56,7 +57,7 @@ export function computeKpis(bookings, range, hours) {
   let ratioSum = 0
   let openDays = 0
   for (const day of days) {
-    const dayBookings = scoped.filter((b) => isSameDayIso(b.startAt, day))
+    const dayBookings = scoped.filter((b) => sameBusinessDay(b.startAt, day, hours))
     const { openMin, ratio } = occupancyFor(day, dayBookings, hours)
     if (openMin === 0) continue
     ratioSum += ratio
@@ -177,14 +178,16 @@ export function byStatus(bookings, range) {
  *
  * @returns {{ weekday: number, hour: number, count: number }[]}
  */
-export function demandHeatmap(bookings, range, fromHour = 8, toHour = 20) {
+export function demandHeatmap(bookings, range, fromHour = 8, toHour = 20, schedule = null) {
   const grid = new Map()
   for (const b of inRange(bookings, range)) {
     if (b.status === 'cancelled') continue
     const d = new Date(b.startAt)
-    const h = d.getHours()
+    // With a schedule, 1 a.m. is hour 25 of the evening it belongs to.
+    const day = schedule ? businessDayOf(d, schedule) : startOfDay(d)
+    const h = Math.floor((d.getTime() - day.getTime()) / 3_600_000)
     if (h < fromHour || h > toHour) continue
-    const k = `${d.getDay()}:${h}`
+    const k = `${day.getDay()}:${h}`
     grid.set(k, (grid.get(k) ?? 0) + 1)
   }
 

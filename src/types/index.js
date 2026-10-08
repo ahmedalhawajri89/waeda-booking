@@ -40,6 +40,8 @@
  * @typedef {object} Resource
  * @property {string}  id
  * @property {string}  name
+ * @property {string}  [role]   what they do, shown to guests
+ * @property {'female' | 'male' | null} [gender] lets a guest choose who sees them
  * @property {boolean} isActive
  */
 
@@ -78,6 +80,8 @@
  * @property {PaymentStatus} paymentStatus
  * @property {number} priceMinor    Snapshot of the price at booking time — services change price over time.
  * @property {BookingChannel} channel
+ * @property {string | null} [acknowledgedAt] when the business first saw it;
+ *   null for a guest's booking nobody has opened yet, absent on older data.
  * @property {string} [notes]
  * @property {string} createdAt
  * @property {string} updatedAt
@@ -107,7 +111,7 @@
  * @property {SlotState} state
  */
 
-/** @typedef {'pending_soon' | 'overdue_completion' | 'unpaid_imminent' | 'conflict'} AttentionReason */
+/** @typedef {'pending_soon' | 'overdue_completion' | 'unacknowledged' | 'unpaid_imminent' | 'conflict'} AttentionReason */
 
 /**
  * @typedef {object} AttentionItem

@@ -51,6 +51,11 @@ class RuleUnderstanding implements ReplyUnderstanding
             return ['intent' => 'choose', 'option' => (int) $n[1]];
         }
 
+        // The menu every message offers: 1 confirm, 2 cancel, 3 another time.
+        if ($t === '3') {
+            return ['intent' => 'reschedule'];
+        }
+
         $when = $this->readWhen($t, $now);
         if (preg_match('/('.self::CHANGE.')/u', $t)) {
             return ['intent' => 'reschedule'] + $when;

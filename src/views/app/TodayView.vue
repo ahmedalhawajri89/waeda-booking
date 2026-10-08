@@ -17,6 +17,7 @@ import { resources } from '@/data/catalog'
 import { business } from '@/data/business'
 import { useBookingMove } from '@/composables/useBookingMove'
 import { ATTENTION } from '@/lib/status'
+import { clone } from '@/lib/clone'
 import { money, relativeDayTime, time } from '@/lib/format'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -59,6 +60,19 @@ const KPIS = computed(() => [
   { label: 'الإشغال', value: `${Math.round(occupancy.value.ratio * 100)}%` },
   { label: 'المتوقع اليوم', value: money(live.value.reduce((s, b) => s + b.priceMinor, 0)) },
 ])
+
+/**
+ * Close a booking whose time has passed. The guard learns only from closed
+ * bookings, so this one tap is what keeps its risk scores honest.
+ */
+function close(booking, status) {
+  const before = clone(booking)
+  store.setStatus(booking.id, status)
+  const name = store.hydrate(booking).customer?.name ?? ''
+  toast.success(status === 'completed' ? `سُجّل حضور ${name}` : `سُجّل غياب ${name}`, {
+    action: { label: 'تراجع', onClick: () => store.restore(before) },
+  })
+}
 
 const protectedTotal = computed(() => guard.protectedRevenue?.total ?? 0)
 
@@ -182,7 +196,7 @@ const shareUrl = computed(
             </RouterLink>
           </header>
           <ResourceDay
-            :date="new Date()"
+            :date="store.currentDay()"
             :resources="team"
             :scale="1.1"
             @open="emit('openBooking', $event)"
@@ -205,7 +219,7 @@ const shareUrl = computed(
                 >
               </h2>
               <RouterLink
-                v-if="attention.length > 4"
+                v-if="attention.length > 5"
                 to="/app/bookings?filter=attention"
                 class="text-fg-subtle hover:text-fg text-xs font-semibold"
                 >عرض الكل</RouterLink
@@ -215,10 +229,14 @@ const shareUrl = computed(
               لا شيء ينتظرك الآن.
             </p>
             <ul v-else class="divide-border divide-y">
-              <li v-for="item in attention.slice(0, 4)" :key="item.booking.id + item.reason">
+              <li
+                v-for="item in attention.slice(0, 5)"
+                :key="item.booking.id + item.reason"
+                class="hover:bg-surface-hover flex items-center gap-2 pe-3 transition-colors"
+              >
                 <button
                   type="button"
-                  class="hover:bg-surface-hover flex w-full items-start gap-3 px-4 py-3 text-start transition-colors"
+                  class="flex min-w-0 flex-1 items-start gap-3 py-3 ps-4 text-start"
                   @click="emit('openBooking', item.booking.id)"
                 >
                   <component
@@ -240,6 +258,37 @@ const shareUrl = computed(
                       {{ relativeDayTime(item.booking.startAt) }}</span
                     >
                   </span>
+                </button>
+
+                <!-- the answer, without opening anything -->
+                <div
+                  v-if="item.reason === 'overdue_completion'"
+                  class="flex shrink-0 gap-1"
+                  role="group"
+                  :aria-label="`حضور ${store.hydrate(item.booking).customer?.name ?? ''}`"
+                >
+                  <button
+                    type="button"
+                    class="border-border text-success-700 hover:bg-success-50 rounded-[var(--radius-sm)] border px-2 py-1 text-xs font-semibold"
+                    @click="close(item.booking, 'completed')"
+                  >
+                    حضر
+                  </button>
+                  <button
+                    type="button"
+                    class="border-border text-danger-700 hover:bg-danger-50 rounded-[var(--radius-sm)] border px-2 py-1 text-xs font-semibold"
+                    @click="close(item.booking, 'no_show')"
+                  >
+                    لم يحضر
+                  </button>
+                </div>
+                <button
+                  v-else-if="item.reason === 'unacknowledged'"
+                  type="button"
+                  class="border-border text-fg hover:bg-surface shrink-0 rounded-[var(--radius-sm)] border px-2 py-1 text-xs font-semibold"
+                  @click="store.acknowledge(item.booking.id)"
+                >
+                  استلمت
                 </button>
               </li>
             </ul>

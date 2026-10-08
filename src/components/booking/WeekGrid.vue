@@ -1,9 +1,9 @@
 <script setup>
 import { computed } from 'vue'
-import { addDays, differenceInMinutes, isSameDay, set, startOfDay } from 'date-fns'
+import { addDays, addMinutes, differenceInMinutes, startOfDay } from 'date-fns'
 import { useBookingsStore } from '@/stores/bookings'
-import { businessHours } from '@/data/catalog'
-import { hoursFor } from '@/lib/availability'
+import { schedule } from '@/data/catalog'
+import { sameBusinessDay, windowFor } from '@/lib/hours'
 import { assignLanes } from '@/lib/lanes'
 import { time } from '@/lib/format'
 import { BOOKING_STATUS, TONE_BLOCK } from '@/lib/status'
@@ -36,15 +36,15 @@ const days = computed(() =>
  * which is true.
  */
 const bounds = computed(() => {
-  let openMin = 24 * 60
+  // Minutes from each day's own midnight; a day that runs late reaches past
+  // 24 × 60, and the rail simply goes on into the small hours.
+  let openMin = 48 * 60
   let closeMin = 0
   for (const d of days.value) {
-    const h = hoursFor(businessHours, d)
-    if (!h || h.isClosed) continue
-    const [oh, om] = h.open.split(':').map(Number)
-    const [ch, cm] = h.close.split(':').map(Number)
-    openMin = Math.min(openMin, (oh ?? 0) * 60 + (om ?? 0))
-    closeMin = Math.max(closeMin, (ch ?? 0) * 60 + (cm ?? 0))
+    const w = windowFor(d, schedule)
+    if (!w) continue
+    openMin = Math.min(openMin, differenceInMinutes(w.open, d))
+    closeMin = Math.max(closeMin, differenceInMinutes(w.close, d))
   }
   if (closeMin <= openMin) return null
   return { openMin, closeMin, totalMin: closeMin - openMin }
@@ -56,7 +56,7 @@ const ticks = computed(() => {
   const out = []
   for (let m = b.openMin; m <= b.closeMin; m += 60) {
     out.push({
-      label: time(set(startOfDay(new Date()), { hours: Math.floor(m / 60), minutes: m % 60 })),
+      label: time(addMinutes(startOfDay(new Date()), m)),
       top: (m - b.openMin) * PX_PER_MIN,
     })
   }
@@ -66,13 +66,10 @@ const ticks = computed(() => {
 function blocksFor(day) {
   const b = bounds.value
   if (!b) return []
-  const dayOpen = set(startOfDay(day), {
-    hours: Math.floor(b.openMin / 60),
-    minutes: b.openMin % 60,
-  })
+  const dayOpen = addMinutes(startOfDay(day), b.openMin)
   return assignLanes(
     props.bookings
-      .filter((bk) => bk.status !== 'cancelled' && isSameDay(new Date(bk.startAt), day))
+      .filter((bk) => bk.status !== 'cancelled' && sameBusinessDay(bk.startAt, day, schedule))
       .map((bk) => ({
         booking: bk,
         view: store.hydrate(bk),
@@ -86,8 +83,7 @@ function blocksFor(day) {
 }
 
 function isClosed(day) {
-  const h = hoursFor(businessHours, day)
-  return !h || h.isClosed
+  return windowFor(day, schedule) === null
 }
 
 const TONE = TONE_BLOCK

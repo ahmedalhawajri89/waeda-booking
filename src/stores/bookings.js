@@ -1,11 +1,12 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { addMinutes, isAfter, isSameDay } from 'date-fns'
+import { addMinutes, isAfter } from 'date-fns'
 import { toast } from 'vue-sonner'
 import { repository } from '@/data/repository'
 import { ConflictError, isConflict } from '@/data/errors'
-import { businessHours, resourceById, serviceById } from '@/data/catalog'
+import { resourceById, schedule, serviceById } from '@/data/catalog'
 import { hasConflict, occupancyFor } from '@/lib/availability'
+import { businessDayOf, sameBusinessDay } from '@/lib/hours'
 import { clone } from '@/lib/clone'
 import { dayLabel, time } from '@/lib/format'
 import { useCustomersStore } from './customers'
@@ -75,11 +76,14 @@ export const useBookingsStore = defineStore('bookings', () => {
 
   const sorted = computed(() => [...items.value].sort((a, b) => a.startAt.localeCompare(b.startAt)))
 
+  /** A business day's bookings — 1 a.m. belongs to the evening before, when it ran late. */
   function onDay(date) {
-    return sorted.value.filter((b) => isSameDay(new Date(b.startAt), date))
+    return sorted.value.filter((b) => sameBusinessDay(b.startAt, date, schedule))
   }
 
-  const today = computed(() => onDay(new Date()))
+  /** The business day in progress: past midnight, still last night's while it runs. */
+  const currentDay = () => businessDayOf(new Date(), schedule)
+  const today = computed(() => onDay(currentDay()))
 
   /** The next bookings still ahead of us today or later. */
   const upcoming = computed(() => {
@@ -110,8 +114,15 @@ export const useBookingsStore = defineStore('bookings', () => {
       const start = new Date(b.startAt).getTime()
       const end = new Date(b.endAt).getTime()
 
-      if (b.status === 'confirmed' && end < now) {
+      const live = b.status === 'pending' || b.status === 'confirmed'
+
+      // Over, and nobody said whether they came. Pending ones too: a booking
+      // nobody confirmed still happened or did not, and the guard learns
+      // only from the ones that are closed.
+      if (live && end < now) {
         push(b, 'overdue_completion')
+      } else if (live && b.acknowledgedAt === null && start > now) {
+        push(b, 'unacknowledged')
       } else if (b.status === 'pending' && start - now < 24 * HOUR && start > now - HOUR) {
         push(b, 'pending_soon')
       } else if (
@@ -127,7 +138,7 @@ export const useBookingsStore = defineStore('bookings', () => {
     return out.sort((a, b) => a.booking.startAt.localeCompare(b.booking.startAt))
   })
 
-  const occupancyToday = computed(() => occupancyFor(new Date(), today.value, businessHours))
+  const occupancyToday = computed(() => occupancyFor(currentDay(), today.value, schedule))
 
   /**
    * Built once per change instead of scanning on every call.
@@ -153,9 +164,13 @@ export const useBookingsStore = defineStore('bookings', () => {
 
   /* ------------------------------------------------------------- actions */
 
-  function appendEvent(b, type, summary) {
-    b.history.push({ at: new Date().toISOString(), type, summary })
-    b.updatedAt = new Date().toISOString()
+  /** Every change made here is made by someone at the business, so it is also seen. */
+  function appendEvent(b, type, summary, { byGuest = false } = {}) {
+    const now = new Date().toISOString()
+    b.history.push({ at: now, type, summary })
+    b.updatedAt = now
+    if (byGuest) b.acknowledgedAt = null
+    else b.acknowledgedAt ??= now
   }
 
   /**
@@ -189,6 +204,9 @@ export const useBookingsStore = defineStore('bookings', () => {
       paymentStatus: input.paymentStatus ?? 'unpaid',
       priceMinor: service.priceMinor,
       channel: input.channel ?? 'phone',
+      // Made at the desk is seen at the desk. A guest's booking waits until
+      // someone at the business opens or acts on it.
+      acknowledgedAt: input.byGuest ? null : now,
       notes: input.notes,
       createdAt: now,
       updatedAt: now,
@@ -259,7 +277,7 @@ export const useBookingsStore = defineStore('bookings', () => {
    * @param {{ startAt: string, resourceId?: string }} to
    * @returns {true | 'missing' | 'conflict' | 'not_offered'}
    */
-  function move(id, { startAt, resourceId }) {
+  function move(id, { startAt, resourceId }, { byGuest = false } = {}) {
     const b = byId(id)
     if (!b) return 'missing'
     const service = serviceById(b.serviceId)
@@ -288,6 +306,7 @@ export const useBookingsStore = defineStore('bookings', () => {
       b,
       'rescheduled',
       `أُعيدت جدولة الحجز من ${dayLabel(before.startAt)} ${time(before.startAt)}${changedPerson ? ` مع ${who(before.resourceId)}` : ''} إلى ${dayLabel(b.startAt)} ${time(b.startAt)}${changedPerson ? ` مع ${who(b.resourceId)}` : ''}`,
+      { byGuest },
     )
     persist(b, before)
     return true
@@ -321,6 +340,25 @@ export const useBookingsStore = defineStore('bookings', () => {
     }
   }
 
+  /**
+   * "Got it" — the business has seen a booking that arrived on its own, so
+   * the guest's page can say it reached them. Opening the booking counts.
+   */
+  function acknowledge(id) {
+    const b = byId(id)
+    // null is "not yet"; a booking from before this field existed counts as seen.
+    if (!b || b.acknowledgedAt !== null) return
+    b.acknowledgedAt = new Date().toISOString()
+    repository
+      .acknowledgeBooking(id)
+      .then((saved) => {
+        if (saved?.acknowledgedAt) b.acknowledgedAt = saved.acknowledgedAt
+      })
+      .catch(() => {
+        b.acknowledgedAt = null
+      })
+  }
+
   /** Restore a previous snapshot — powers the undo affordance on destructive actions. */
   function restore(snapshot) {
     const b = byId(snapshot.id)
@@ -340,6 +378,7 @@ export const useBookingsStore = defineStore('bookings', () => {
     byId,
     sorted,
     onDay,
+    currentDay,
     today,
     upcoming,
     conflicts,
@@ -353,6 +392,7 @@ export const useBookingsStore = defineStore('bookings', () => {
     reschedule,
     move,
     addNote,
+    acknowledge,
     restore,
     adopt,
   }

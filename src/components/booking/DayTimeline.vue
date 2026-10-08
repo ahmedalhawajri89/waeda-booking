@@ -1,9 +1,9 @@
 <script setup>
 import { computed } from 'vue'
-import { differenceInMinutes, isSameDay, set, startOfDay } from 'date-fns'
+import { differenceInMinutes } from 'date-fns'
 import { useBookingsStore } from '@/stores/bookings'
-import { businessHours } from '@/data/catalog'
-import { hoursFor } from '@/lib/availability'
+import { schedule } from '@/data/catalog'
+import { windowFor } from '@/lib/hours'
 import { assignLanes } from '@/lib/lanes'
 import { time } from '@/lib/format'
 import { BOOKING_STATUS, TONE_BLOCK } from '@/lib/status'
@@ -22,16 +22,11 @@ defineEmits(['open'])
 const store = useBookingsStore()
 const PX_PER_MIN = 1.4
 
-const hours = computed(() => hoursFor(businessHours, props.date))
-
+/** The business day, which may close after midnight. */
 const bounds = computed(() => {
-  const h = hours.value
-  if (!h || h.isClosed) return null
-  const [oh, om] = h.open.split(':').map(Number)
-  const [ch, cm] = h.close.split(':').map(Number)
-  const open = set(startOfDay(props.date), { hours: oh, minutes: om })
-  const close = set(startOfDay(props.date), { hours: ch, minutes: cm })
-  return { open, close, totalMin: differenceInMinutes(close, open) }
+  const w = windowFor(props.date, schedule)
+  if (!w) return null
+  return { open: w.open, close: w.close, totalMin: differenceInMinutes(w.close, w.open) }
 })
 
 const ticks = computed(() => {
@@ -63,7 +58,7 @@ const blocks = computed(() => {
 /** Only meaningful when the timeline is showing today. */
 const nowTop = computed(() => {
   const b = bounds.value
-  if (!b || !isSameDay(props.date, new Date())) return null
+  if (!b) return null
   const mins = differenceInMinutes(new Date(), b.open)
   if (mins < 0 || mins > b.totalMin) return null
   return mins * PX_PER_MIN
