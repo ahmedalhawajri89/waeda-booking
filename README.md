@@ -6,9 +6,9 @@
 
 **Arabic-first appointment booking for service businesses.** Customers book from their phone without creating an account; the business runs its whole day from one console, and an appointment guard keeps booked times from going empty.
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-Open%20the%20app-CF4417?style=for-the-badge&logo=vercel&logoColor=white)](https://booking-management-system-xi.vercel.app/)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Open%20the%20app-CF4417?style=for-the-badge&logo=vercel&logoColor=white)](https://waeda-booking.vercel.app/)
 
-**Live demo: [booking-management-system-xi.vercel.app](https://booking-management-system-xi.vercel.app/)**
+**Live demo: [waeda-booking.vercel.app](https://waeda-booking.vercel.app/)**
 No sign-up needed. The public site is the customer's side; open `/login` and use the demo account to reach the operator console at `/app`.
 
 Built as a working product rather than a screen mockup. Availability, conflicts, pricing and opening hours are computed by real rules, enforced on the server, and covered by tests.
@@ -183,7 +183,7 @@ Licensed under the MIT License.
 
 **وعدة** منصة حجز مواعيد عربية للمنشآت الخدمية: العيادات والصالونات ومراكز التدريب والخدمات المنزلية والمطاعم والملاعب.
 
-**التجربة الحية:** [booking-management-system-xi.vercel.app](https://booking-management-system-xi.vercel.app/) بدون تسجيل. الصفحة العامة هي جهة العميل، ولوحة التحكم على `/app` بالدخول بالحساب التجريبي.
+**التجربة الحية:** [waeda-booking.vercel.app](https://waeda-booking.vercel.app/) بدون تسجيل. الصفحة العامة هي جهة العميل، ولوحة التحكم على `/app` بالدخول بالحساب التجريبي.
 
 **للعميل:** لكل منشأة صفحة حجز خاصة. العميل يحجز برقم جواله بدون إنشاء حساب، ويختار الخدمة والمختص واليوم والوقت، ويقدر يعدّل موعده أو يلغيه لاحقاً.
 
