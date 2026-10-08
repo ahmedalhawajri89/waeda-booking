@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/cover.png" alt="Booking Management System" width="900">
+</p>
+
 # Booking Management System
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-Open%20the%20app-2563EB?style=for-the-badge&logo=vercel&logoColor=white)](https://booking-management-system-xi.vercel.app/)
