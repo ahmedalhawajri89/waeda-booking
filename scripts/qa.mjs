@@ -277,6 +277,13 @@ console.log(
   const phoneFirst =
     fields.findIndex((t) => /رقم الجوال/.test(t)) < fields.findIndex((t) => /الخدمة/.test(t))
   const free = await dlg.locator('[role="radiogroup"] [role="radio"]:not([disabled])').count()
+  // Wide: customer, month and times side by side, the whole window on screen.
+  const box = await dlg.boundingBox()
+  console.log(
+    box && box.height <= 900 && box.width >= 900
+      ? '✓ new booking opens as one wide window, all of it on screen'
+      : `✗ new booking window ${Math.round(box?.width)}×${Math.round(box?.height)}`,
+  )
   console.log(
     phoneFirst && free > 0
       ? `✓ new booking: the customer comes first, and the day shown has ${free} free times`
@@ -600,6 +607,8 @@ await go('/app', 'app-weekly', 900)
     .click()
   await form.getByLabel('رقم الجوال').fill('0507770001')
   await form.getByLabel('اسم العميل').fill('فريق الثلاثاء')
+  // Repeating sits behind «خيارات» with payment and notes.
+  await form.locator('[data-options-toggle]').click()
   await form.locator('[data-repeat]').getByLabel('كرّر أسبوعياً').check()
   await form.getByLabel('عدد الأسابيع').selectOption('4')
   await form.getByRole('button', { name: 'إنشاء الحجز' }).click()

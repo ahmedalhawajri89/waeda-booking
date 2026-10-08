@@ -9,6 +9,8 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 defineProps({
   slots: { type: Array, required: true },
   modelValue: { type: [String, null], required: true },
+  /** 'grid', or 'list': two to a row on a wide screen, for a narrow column. */
+  layout: { type: String, required: false, default: 'grid' },
 })
 const emit = defineEmits(['update:modelValue'])
 </script>
@@ -27,7 +29,10 @@ const emit = defineEmits(['update:modelValue'])
     v-else
     role="radiogroup"
     aria-label="اختر الوقت"
-    class="grid grid-cols-3 gap-2 sm:grid-cols-4"
+    class="grid gap-2"
+    :class="
+      layout === 'list' ? 'grid-cols-3 sm:grid-cols-4 lg:grid-cols-2' : 'grid-cols-3 sm:grid-cols-4'
+    "
   >
     <button
       v-for="slot in slots"
