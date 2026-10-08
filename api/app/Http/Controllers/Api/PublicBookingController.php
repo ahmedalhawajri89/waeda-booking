@@ -49,6 +49,8 @@ class PublicBookingController extends Controller
             'phone' => ['required', 'string', 'max:64'],
             'email' => ['nullable', 'email', 'max:255'],
             'notes' => ['nullable', 'string', 'max:2000'],
+            // One of the lengths the service offers (a 90-minute court); none is its default.
+            'durationMin' => ['nullable', 'integer', 'between:5,600'],
         ]);
 
         $org = $this->publicOrgId($request);
@@ -66,12 +68,15 @@ class PublicBookingController extends Controller
             return response()->json(['error' => 'start_in_past'], 422);
         }
 
-        $this->rules->withinHours($org, $start, $start->copy()->addMinutes($service->occupiedMinutes()));
+        $duration = $this->rules->duration($service, $data['durationMin'] ?? null);
+        // A class is booked at one of its own times, not any free moment.
+        $this->rules->isSession($org, $service, $data['resourceId'], $start);
+        $this->rules->withinHours($org, $start, $start->copy()->addMinutes($service->occupiedMinutes($duration)));
 
         // BookingWriter opens its own transaction and takes the resource lock;
         // the customer has to exist before that, so it is written first and
         // rolls back with the booking if the slot turns out to be taken.
-        return DB::transaction(function () use ($org, $data, $service) {
+        return DB::transaction(function () use ($org, $data, $service, $duration) {
             $customer = $this->upsertCustomer($org, $data);
 
             $booking = $this->writer->create([
@@ -84,9 +89,16 @@ class PublicBookingController extends Controller
                 'payment_status' => 'unpaid',
                 'channel' => 'online',
                 'notes' => $data['notes'] ?? null,
+                'duration_min' => $duration,
             ]);
 
-            return response()->json(['id' => $booking->id, 'reference' => $booking->reference], 201);
+            // The price the server settled on, so the page never shows its own guess.
+            return response()->json([
+                'id' => $booking->id,
+                'reference' => $booking->reference,
+                'priceMinor' => $booking->price_minor,
+                'endAt' => $booking->end_at->toIso8601String(),
+            ], 201);
         });
     }
 
@@ -143,6 +155,35 @@ class PublicBookingController extends Controller
                 'startAt' => $b->start_at->toIso8601String(),
                 'endAt' => $b->end_at->toIso8601String(),
             ])->all()
+        );
+    }
+
+    /**
+     * Seats taken in a class's sessions — counts only, never who. The busy
+     * ranges above cannot tell one class's seats from another booking.
+     */
+    public function seats(Request $request, string $serviceId)
+    {
+        $data = $request->validate(['from' => ['required', 'date'], 'to' => ['required', 'date', 'after_or_equal:from']]);
+        $org = $this->publicOrgId($request);
+        $service = \App\Models\Service::where('org_id', $org)->where('is_active', true)->find($serviceId);
+        if (! $service || ! $service->isGroup()) {
+            return response()->json([]);
+        }
+        $tz = Organization::query()->whereKey($org)->value('timezone') ?? 'UTC';
+        $from = Carbon::parse($data['from'], $tz)->startOfDay();
+        $to = Carbon::parse($data['to'], $tz)->endOfDay()->min($from->copy()->addDays(60));
+
+        return response()->json(
+            Booking::query()->where('service_id', $service->id)->whereIn('status', Booking::BLOCKING)
+                ->where('start_at', '>=', $from->copy()->utc())->where('start_at', '<=', $to->copy()->utc())
+                ->get(['start_at', 'resource_id'])
+                ->groupBy(fn ($b) => $b->resource_id.'|'.$b->start_at->toIso8601String())
+                ->map(fn ($g) => [
+                    'startAt' => $g->first()->start_at->toIso8601String(),
+                    'resourceId' => $g->first()->resource_id,
+                    'taken' => $g->count(),
+                ])->values()->all()
         );
     }
 
@@ -208,7 +249,7 @@ class PublicBookingController extends Controller
             'serviceId' => $booking->service_id,
             'resourceId' => $booking->resource_id,
             'resourceName' => $booking->resource?->name,
-            'durationMin' => $booking->service->duration_min,
+            'durationMin' => $booking->duration_min ?? $booking->service->duration_min,
         ]);
     }
 
@@ -254,7 +295,7 @@ class PublicBookingController extends Controller
         $this->rules->withinHours(
             $booking->org_id,
             $start,
-            $start->copy()->addMinutes($booking->service->occupiedMinutes()),
+            $start->copy()->addMinutes($booking->service->occupiedMinutes($booking->duration_min)),
         );
 
         $booking = $this->writer->update($booking, ['start_at' => $start]);

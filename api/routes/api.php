@@ -45,6 +45,8 @@ Route::prefix('public')->middleware('throttle:20,1')->group(function () {
     Route::get('availability', [PublicBookingController::class, 'availability'])
         ->withoutMiddleware('throttle:20,1')->middleware('throttle:60,1');
     Route::post('bookings', [PublicBookingController::class, 'store']);
+    // A class's seats taken, by session — counts only.
+    Route::get('classes/{serviceId}/seats', [PublicBookingController::class, 'seats']);
     Route::get('bookings/{reference}', [PublicBookingController::class, 'show']);
     Route::post('bookings/{reference}/cancel', [PublicBookingController::class, 'cancel']);
     Route::post('bookings/{reference}/reschedule', [PublicBookingController::class, 'reschedule']);

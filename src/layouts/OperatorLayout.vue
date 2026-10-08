@@ -102,7 +102,14 @@ const SECTIONS = computed(() => [
   {
     title: null,
     items: [
-      { to: '/app', label: 'اليوم', icon: Sun, badge: todayCount.value, tone: 'info' },
+      {
+        to: '/app',
+        label: 'اليوم',
+        icon: Sun,
+        badge: todayCount.value,
+        tone: 'info',
+        hint: 'مواعيد اليوم',
+      },
       { to: '/app/calendar', label: 'التقويم', icon: CalendarDays },
       {
         to: '/app/bookings',
@@ -132,6 +139,11 @@ const SECTIONS = computed(() => [
 ])
 
 const DOT = { warning: 'bg-warning-600', signal: 'bg-primary' }
+/** Counts that ask for action, as pills in their tone. */
+const PILL = {
+  warning: 'bg-warning-50 text-warning-700 font-bold',
+  signal: 'bg-primary-soft text-primary-fg font-bold',
+}
 
 /** The business switcher's menu: the page customers see, and its settings. */
 const BUSINESS_ITEMS = [
@@ -414,18 +426,15 @@ const wide = computed(() => !folded.value)
               <span v-if="wide" class="hidden lg:inline">{{ item.label }}</span>
               <template v-if="item.badge">
                 <!-- wide: a quiet number, with a dot only when it asks for action -->
+                <!-- a count that asks for action is a pill; a plain tally stays grey.
+                     The tooltip says which, so 13 never reads as "13 bookings". -->
                 <span
                   v-if="wide"
-                  class="ms-auto hidden items-center gap-1.5 text-xs lg:flex"
-                  :class="item.tone === 'info' ? 'text-fg-faint' : 'text-fg font-semibold'"
+                  class="ms-auto hidden min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] leading-5 lg:flex"
+                  :class="PILL[item.tone] ?? 'text-fg-faint'"
+                  :title="item.hint ? `${item.badge} ${item.hint}` : undefined"
                   data-numeric
                 >
-                  <span
-                    v-if="DOT[item.tone]"
-                    class="h-1.5 w-1.5 rounded-full"
-                    :class="DOT[item.tone]"
-                    aria-hidden="true"
-                  />
                   {{ item.badge }}
                 </span>
                 <!-- folded: the dot alone, and only when action is asked -->

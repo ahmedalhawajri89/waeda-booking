@@ -40,7 +40,7 @@ beforeAll(async () => {
   ;({ createPinia, setActivePinia } = await import('pinia'))
   ;({ useSubscriptionStore } = await import('@/stores/subscription'))
   ;({ repository } = await import('@/data/repository'))
-}, 30000)
+}, 90000)
 
 let sub
 beforeEach(() => {

@@ -5,6 +5,7 @@ import { schedule } from '@/data/catalog'
 import { isDemoBackend } from '@/data/repository'
 import { generateSlots } from '@/lib/availability'
 import { windowFor } from '@/lib/hours'
+import { seatsTaken, upcomingSessions } from '@/lib/sessions'
 
 /** How far ahead a guest can look, and how far the busy lookup reaches. */
 export const SEARCH_DAYS = 28
@@ -78,9 +79,10 @@ export function useGuestAvailability() {
    * the booking lands on when "anyone" was chosen.
    *
    * @param {Date} day
-   * @param {{ service: object | null, resources: { id: string }[], excludeBookingId?: string }} q
+   * @param {{ service: object | null, resources: { id: string }[], excludeBookingId?: string,
+   *           durationMin?: number | null }} q
    */
-  function slotsOn(day, { service, resources, excludeBookingId }) {
+  function slotsOn(day, { service, resources, excludeBookingId, durationMin = null }) {
     if (!service || !resources.length) return []
     const byStart = new Map()
     for (const r of resources) {
@@ -91,6 +93,7 @@ export function useGuestAvailability() {
         bookings: blocking.value,
         hours: schedule,
         excludeBookingId,
+        durationMin,
       })) {
         const seen = byStart.get(s.startAt)
         if (!seen)
@@ -125,5 +128,52 @@ export function useGuestAvailability() {
     return null
   }
 
-  return { busy, loadBusy, slotsOn, freeCount, nearest }
+  /* ------------------------------------------------------------ classes */
+  const seats = ref({}) // serviceId → [{ startAt, resourceId, taken }]
+
+  /** Seats taken in a class's sessions; the demo counts its own bookings. */
+  async function loadSeats(service) {
+    if (isDemoBackend || !service) return
+    const { classSeats } = await import('@/data/api/public')
+    try {
+      const from = format(new Date(), 'yyyy-MM-dd')
+      const to = format(addDays(new Date(), SEARCH_DAYS + 1), 'yyyy-MM-dd')
+      seats.value = { ...seats.value, [service.id]: await classSeats(service.id, from, to) }
+    } catch {
+      seats.value = { ...seats.value, [service.id]: [] }
+    }
+  }
+
+  /**
+   * A class's coming sessions with the seats left. A session whose trainer
+   * or hall is taken by something else at that time is shown full, as the
+   * server would refuse it.
+   */
+  function sessionsFor(service, resources) {
+    const counted = (resourceId, startAt) =>
+      isDemoBackend
+        ? seatsTaken(bookings.items, service.id, resourceId, startAt)
+        : ((seats.value[service.id] ?? []).find(
+            (x) =>
+              x.resourceId === resourceId &&
+              new Date(x.startAt).getTime() === new Date(startAt).getTime(),
+          )?.taken ?? 0)
+    return upcomingSessions(service, {
+      days: SEARCH_DAYS,
+      schedule,
+      resources,
+      takenFor: counted,
+    }).map((s) => {
+      const overlapping = blocking.value.filter(
+        (b) =>
+          b.resourceId === s.resourceId &&
+          new Date(b.startAt) < new Date(s.endAt) &&
+          new Date(b.endAt) > new Date(s.startAt),
+      ).length
+      const blockedByOther = overlapping > s.taken
+      return blockedByOther ? { ...s, left: 0, blocked: true } : s
+    })
+  }
+
+  return { busy, loadBusy, slotsOn, freeCount, nearest, seats, loadSeats, sessionsFor }
 }

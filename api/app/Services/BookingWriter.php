@@ -38,22 +38,37 @@ use Illuminate\Support\Facades\DB;
  */
 class BookingWriter
 {
+    public function __construct(private Pricing $pricing)
+    {
+    }
+
     /**
      * Half-open overlap: touching edges do not collide, matching overlaps() in
      * src/lib/availability.js exactly. An appointment ending at 10:00 and one
      * starting at 10:00 do not conflict; any real overlap does.
      *
+     * A class is the one exception: seats in the same session (same service,
+     * same start) share the time, up to the class's capacity. Anything else
+     * on the resource at that time is still a clash.
+     *
      * Must be called inside a transaction that already holds the resource lock.
      */
-    private function overlaps(string $resourceId, CarbonInterface $start, CarbonInterface $end, ?string $ignoreId = null): bool
+    private function overlaps(string $resourceId, CarbonInterface $start, CarbonInterface $end, ?string $ignoreId = null, ?Service $service = null): bool
     {
-        return Booking::query()
+        $clashing = Booking::query()
             ->where('resource_id', $resourceId)
             ->whereIn('status', Booking::BLOCKING)
             ->when($ignoreId, fn ($q) => $q->whereKeyNot($ignoreId))
             ->where('start_at', '<', $end)
             ->where('end_at', '>', $start)
-            ->exists();
+            ->get(['service_id', 'start_at']);
+
+        if (! $service || $service->capacity <= 1) {
+            return $clashing->isNotEmpty();
+        }
+        $sameSession = $clashing->filter(fn ($b) => $b->service_id === $service->id && $b->start_at->equalTo($start));
+
+        return $sameSession->count() !== $clashing->count() || $sameSession->count() >= $service->capacity;
     }
 
     /** Takes the per-resource mutex. Everything after this call is serialised. */
@@ -117,10 +132,12 @@ class BookingWriter
             // UTC before it touches the database: the column has no zone, and an
             // offset left on the instant was stored as if it were UTC.
             $start = Carbon::parse($input['start_at'])->utc();
-            $end = $start->copy()->addMinutes($service->occupiedMinutes());
+            // A chosen length, when the service offers more than one.
+            $duration = isset($input['duration_min']) ? (int) $input['duration_min'] : null;
+            $end = $start->copy()->addMinutes($service->occupiedMinutes($duration));
 
             $this->lockResource($input['resource_id']);
-            if ($this->overlaps($input['resource_id'], $start, $end)) {
+            if ($this->overlaps($input['resource_id'], $start, $end, null, $service)) {
                 throw new BookingConflict();
             }
 
@@ -137,9 +154,11 @@ class BookingWriter
                 'end_at' => $end,
                 'status' => $input['status'] ?? 'pending',
                 'payment_status' => $input['payment_status'] ?? 'unpaid',
-                'price_minor' => $service->price_minor,
+                'price_minor' => $this->pricing->priceFor($service, $start, $duration),
                 'channel' => $input['channel'] ?? 'online',
                 'notes' => $input['notes'] ?? null,
+                'duration_min' => $duration,
+                'series_id' => $input['series_id'] ?? null,
             ]);
 
             $this->event($booking, 'created', 'أُنشئ الحجز', $actorId);
@@ -182,7 +201,10 @@ class BookingWriter
             // The end follows the start and the service, always. It used to be
             // recomputed only when the slot needed re-checking, so a cancelled
             // booking moved forward kept its old end and broke end > start.
-            $end = $start->copy()->addMinutes($service->occupiedMinutes());
+            $duration = array_key_exists('duration_min', $input)
+                ? ($input['duration_min'] === null ? null : (int) $input['duration_min'])
+                : $booking->duration_min;
+            $end = $start->copy()->addMinutes($service->occupiedMinutes($duration));
 
             $moved = ! $start->equalTo($booking->start_at)
                 || ! $end->equalTo($booking->end_at)
@@ -193,7 +215,7 @@ class BookingWriter
             // that moves, grows, or comes back to life has to earn its slot again.
             if ($becomesBlocking && ($moved || ! in_array($booking->status, Booking::BLOCKING, true))) {
                 $this->lockResource($resourceId);
-                if ($this->overlaps($resourceId, $start, $end, $booking->id)) {
+                if ($this->overlaps($resourceId, $start, $end, $booking->id, $service)) {
                     throw new BookingConflict();
                 }
             }
@@ -211,9 +233,14 @@ class BookingWriter
             ]);
             // The price is a snapshot of the service booked; a different
             // service is a different price.
-            if ($serviceChanged) {
-                $booking->price_minor = $service->price_minor;
+            // A new length or a new hour can change the price too (a longer
+            // game, the peak) — but never under a booking already paid for.
+            $durationChanged = $duration !== $booking->duration_min;
+            if ($serviceChanged || $durationChanged
+                || (! $start->equalTo($booking->start_at) && $booking->payment_status === 'unpaid')) {
+                $booking->price_minor = $this->pricing->priceFor($service, $start, $duration);
             }
+            $booking->duration_min = $duration;
             $booking->start_at = $start;
             $booking->end_at = $end;
             $booking->save();

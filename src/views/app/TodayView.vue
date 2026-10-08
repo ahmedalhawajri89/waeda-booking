@@ -57,7 +57,8 @@ const KPIS = computed(() => [
     value: live.value.filter((b) => b.status === 'pending').length,
     warn: true,
   },
-  { label: 'الإشغال', value: `${Math.round(occupancy.value.ratio * 100)}%` },
+  // On a phone four numbers are enough; the rest wait for a wider screen.
+  { label: 'الإشغال', value: `${Math.round(occupancy.value.ratio * 100)}%`, wide: true },
   { label: 'المتوقع اليوم', value: money(live.value.reduce((s, b) => s + b.priceMinor, 0)) },
 ])
 
@@ -160,6 +161,7 @@ const shareUrl = computed(
           v-for="k in KPIS"
           :key="k.label"
           class="border-border bg-surface rounded-[var(--radius-lg)] border px-4 py-3"
+          :class="k.wide && 'hidden sm:block'"
         >
           <dt class="text-fg-subtle text-xs">{{ k.label }}</dt>
           <dd
@@ -172,7 +174,7 @@ const shareUrl = computed(
         </div>
         <RouterLink
           to="/app/guard"
-          class="border-border bg-surface hover:border-border-strong rounded-[var(--radius-lg)] border px-4 py-3 transition-colors"
+          class="border-border bg-surface hover:border-border-strong hidden rounded-[var(--radius-lg)] border px-4 py-3 transition-colors sm:block"
         >
           <dt class="text-fg-subtle flex items-center gap-1 text-xs">
             <ShieldCheck class="text-primary-fg h-3.5 w-3.5" aria-hidden="true" /> حماه الحارس
@@ -205,8 +207,9 @@ const shareUrl = computed(
           />
         </section>
 
-        <!-- what needs me, and what is next -->
-        <div class="space-y-5">
+        <!-- what needs me, and what is next. On a phone it comes before the
+             day, since it is what the morning has to act on. -->
+        <div class="order-first space-y-5 xl:order-none" data-today-side>
           <section class="surface overflow-hidden" aria-labelledby="att-h">
             <header class="border-border flex items-center justify-between border-b px-4 py-3">
               <h2 id="att-h" class="text-fg flex items-center gap-2 text-sm font-bold">
@@ -323,7 +326,8 @@ const shareUrl = computed(
                       {{ store.hydrate(b).resource?.name }}</span
                     >
                   </span>
-                  <StatusBadge :status="b.status" size="sm" icon-only />
+                  <!-- only a pending one says so in words; it is the one to chase -->
+                  <StatusBadge :status="b.status" size="sm" :icon-only="b.status !== 'pending'" />
                 </button>
               </li>
             </ul>

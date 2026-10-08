@@ -32,6 +32,8 @@ class BookingController extends Controller
             'paymentStatus' => $b->payment_status,
             'priceMinor' => $b->price_minor,
             'channel' => $b->channel,
+            'durationMin' => $b->duration_min,
+            'seriesId' => $b->series_id,
             'acknowledgedAt' => $b->acknowledged_at?->toIso8601String(),
             'notes' => $b->notes,
             'createdAt' => $b->created_at?->toIso8601String(),
@@ -84,6 +86,8 @@ class BookingController extends Controller
         'paymentStatus' => 'payment_status',
         'channel' => 'channel',
         'notes' => 'notes',
+        'durationMin' => 'duration_min',
+        'seriesId' => 'series_id',
     ];
 
     /** Request keys → writer input, keeping a present-but-null `notes`. */
@@ -123,6 +127,8 @@ class BookingController extends Controller
             'paymentStatus' => ['sometimes', 'in:unpaid,deposit_paid,paid,refunded'],
             'channel' => ['sometimes', 'in:online,phone,walk_in'],
             'notes' => ['nullable', 'string', 'max:2000'],
+            'durationMin' => ['nullable', 'integer', 'between:5,600'],
+            'seriesId' => ['nullable', 'uuid'],
         ]);
 
         $org = $this->orgId($request);
@@ -144,7 +150,8 @@ class BookingController extends Controller
         $start = Carbon::parse($data['startAt']);
         // No past-time rule here, unlike the public form: an operator records
         // walk-ins and phone bookings after the fact.
-        $this->rules->withinHours($org, $start, $start->copy()->addMinutes($service->occupiedMinutes()), false);
+        $duration = $this->rules->duration($service, $data['durationMin'] ?? null);
+        $this->rules->withinHours($org, $start, $start->copy()->addMinutes($service->occupiedMinutes($duration)), false);
 
         $booking = $this->writer->create(
             ['org_id' => $org, 'id' => $data['id'] ?? null] + $this->toInput($data),
@@ -176,6 +183,7 @@ class BookingController extends Controller
             'paymentStatus' => ['sometimes', 'in:unpaid,deposit_paid,paid,refunded'],
             'channel' => ['sometimes', 'in:online,phone,walk_in'],
             'notes' => ['sometimes', 'nullable', 'string', 'max:2000'],
+            'durationMin' => ['sometimes', 'nullable', 'integer', 'between:5,600'],
         ]);
 
         $org = $this->orgId($request);
@@ -194,12 +202,15 @@ class BookingController extends Controller
         $start = isset($data['startAt']) ? Carbon::parse($data['startAt']) : $booking->start_at;
         $relocating = $serviceId !== $booking->service_id
             || $resourceId !== $booking->resource_id
-            || ! $start->equalTo($booking->start_at);
+            || ! $start->equalTo($booking->start_at)
+            || (array_key_exists('durationMin', $data) && $data['durationMin'] !== $booking->duration_min);
         if ($relocating) {
             // A service switched off since booking can still be moved; only a
             // new choice of service has to be one that is on offer.
             $service = $this->rules->service($org, $serviceId, $resourceId, $serviceId !== $booking->service_id);
-            $this->rules->withinHours($org, $start, $start->copy()->addMinutes($service->occupiedMinutes()), false);
+            $duration = $this->rules->duration($service,
+                array_key_exists('durationMin', $data) ? $data['durationMin'] : $booking->duration_min);
+            $this->rules->withinHours($org, $start, $start->copy()->addMinutes($service->occupiedMinutes($duration)), false);
         }
 
         $saved = $this->writer->update($booking, $this->toInput($data), $request->user()->id);

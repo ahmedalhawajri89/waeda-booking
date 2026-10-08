@@ -5,6 +5,7 @@ import {
   Scissors,
   Sparkles,
   Stethoscope,
+  Trophy,
   Wrench,
 } from 'lucide-vue-next'
 
@@ -26,6 +27,7 @@ export const SERVICE_ICONS = {
   Sparkles,
   Coffee,
   Dumbbell,
+  Trophy,
   Wrench,
 }
 

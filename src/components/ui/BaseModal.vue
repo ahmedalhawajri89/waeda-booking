@@ -47,7 +47,7 @@ const SIZE = {
           :role="role"
           aria-modal="true"
           :aria-label="title"
-          class="elev-modal animate-pop-in bg-surface w-full rounded-[var(--radius-xl)] p-5"
+          class="elev-modal animate-pop-in bg-surface flex max-h-[calc(100dvh-2rem)] w-full flex-col rounded-[var(--radius-xl)] p-5"
           :class="SIZE[size]"
         >
           <div class="flex items-start justify-between gap-4">
@@ -64,11 +64,13 @@ const SIZE = {
             />
           </div>
 
-          <div v-if="$slots.default" class="mt-4">
+          <!-- The body scrolls; the title and the buttons stay put, so a long
+               form never pushes "save" off the screen. -->
+          <div v-if="$slots.default" class="-mx-5 mt-4 min-h-0 flex-1 overflow-y-auto px-5">
             <slot />
           </div>
 
-          <div v-if="$slots.footer" class="mt-5 flex justify-end gap-2">
+          <div v-if="$slots.footer" class="mt-5 flex shrink-0 justify-end gap-2">
             <slot name="footer" />
           </div>
         </div>

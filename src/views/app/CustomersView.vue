@@ -142,7 +142,6 @@ function exportCsv() {
   <div class="w-full p-4 lg:p-6 2xl:px-8">
     <header class="mb-4 flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 class="type-h3 text-fg">العملاء</h1>
         <p class="text-fg-subtle text-sm">من يزورك، كم مرة، ومن غاب عنك.</p>
       </div>
       <div class="flex items-center gap-3">

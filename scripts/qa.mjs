@@ -266,7 +266,67 @@ console.log(
     : '✗ shortcut failed',
 )
 
+// the form starts with who is calling, and on a day that still has a time free
+{
+  const dlg = page.getByRole('dialog')
+  const fields = await dlg
+    .locator('input, legend')
+    .evaluateAll((els) =>
+      els.map((e) => e.getAttribute('aria-label') || e.labels?.[0]?.innerText || e.innerText || ''),
+    )
+  const phoneFirst =
+    fields.findIndex((t) => /رقم الجوال/.test(t)) < fields.findIndex((t) => /الخدمة/.test(t))
+  const free = await dlg.locator('[role="radiogroup"] [role="radio"]:not([disabled])').count()
+  console.log(
+    phoneFirst && free > 0
+      ? `✓ new booking: the customer comes first, and the day shown has ${free} free times`
+      : `✗ new booking form order or day (phone first: ${phoneFirst}, free: ${free})`,
+  )
+}
+
 // --- the console's own tools ------------------------------------------
+// one title per page: the header names the page, the page does not repeat it
+{
+  const twice = []
+  for (const path of ['/app/bookings', '/app/customers', '/app/analytics', '/app/settings']) {
+    await page.goto(BASE + path, { waitUntil: 'networkidle' })
+    await page.waitForTimeout(400)
+    if ((await page.locator('h1').count()) !== 1) twice.push(path)
+  }
+  console.log(
+    twice.length === 0 ? '✓ every console page has one title' : `✗ repeated titles on ${twice}`,
+  )
+}
+
+// «القادمة» lists what is still ahead, not what finished this morning
+{
+  await page.goto(BASE + '/app/bookings', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(600)
+  // Rows only: the status filter has a «مكتمل» option of its own.
+  const done = await page.locator('main tbody, main ul').getByText('مكتمل', { exact: true }).count()
+  console.log(
+    done === 0
+      ? '✓ «القادمة» shows no completed bookings'
+      : `✗ «القادمة» shows ${done} completed bookings`,
+  )
+}
+
+// the calendar list moves a week at a time, and its heading says which week
+{
+  await page.goto(BASE + '/app/calendar?view=agenda', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(500)
+  const head = page.locator('main h2').first()
+  const before = await head.innerText()
+  await page.getByRole('button', { name: 'الأسبوع التالي' }).click()
+  await page.waitForTimeout(400)
+  const after = await head.innerText()
+  console.log(
+    / إلى /.test(before) && before !== after
+      ? `✓ calendar list moves by week — «${before}» → «${after}»`
+      : `✗ calendar list week navigation («${before}» → «${after}»)`,
+  )
+}
+
 await page.keyboard.press('Escape')
 await page.goto(BASE + '/app', { waitUntil: 'networkidle' })
 await page.waitForTimeout(600)
@@ -492,6 +552,126 @@ await go('/book', 'guest-book-gender', 700)
       !/خالد المطيري/.test(summary.split('مع من')[1] ?? '')
       ? '✓ the booking page can narrow to female specialists'
       : '✗ gender filter',
+  )
+}
+
+// --- venues: lengths, an evening price, and the same slot every week -------
+await go('/app/settings?tab=services', 'app-settings-lengths', 800)
+{
+  await page
+    .getByRole('button', { name: /استشارة جلدية/ })
+    .first()
+    .click()
+  await page.waitForTimeout(400)
+  await page
+    .locator('[data-length-options]')
+    .getByRole('checkbox', { name: 'ساعة', exact: true })
+    .click()
+  await page.getByLabel('سعر مختلف في وقت الذروة').check()
+  await page.getByLabel('سعر الذروة (ر.س)').fill('200')
+  await page.getByRole('dialog').getByRole('button', { name: 'حفظ' }).click()
+  await page.waitForTimeout(400)
+
+  await go('/book', 'guest-book-lengths', 800)
+  await page.getByRole('radio', { name: /استشارة جلدية/ }).click()
+  await page.waitForTimeout(300)
+  const chips = page.locator('[data-durations]')
+  const offered = await chips.getByRole('radio').count()
+  await chips.getByRole('radio').nth(1).click()
+  await page.waitForTimeout(300)
+  const total = await page.locator('aside').innerText()
+  console.log(
+    offered === 2 && /300/.test(total)
+      ? '✓ the guest chooses a length, and the price follows it'
+      : `✗ lengths (chips=${offered})`,
+  )
+}
+
+await go('/app', 'app-weekly', 900)
+{
+  await page.keyboard.press('n')
+  await page.waitForTimeout(600)
+  const form = page.getByRole('dialog').last()
+  // A week ahead on the strip, so no week of the series is in the past.
+  await form
+    .locator('[role="radio"]:not([disabled])')
+    .filter({ hasText: /\d:\d\d/ })
+    .first()
+    .click()
+  await form.getByLabel('رقم الجوال').fill('0507770001')
+  await form.getByLabel('اسم العميل').fill('فريق الثلاثاء')
+  await form.locator('[data-repeat]').getByLabel('كرّر أسبوعياً').check()
+  await form.getByLabel('عدد الأسابيع').selectOption('4')
+  await form.getByRole('button', { name: 'إنشاء الحجز' }).click()
+  await page.waitForTimeout(800)
+  const said = await page
+    .locator('[data-sonner-toast]')
+    .filter({ hasText: /حُجز \d من 4/ })
+    .count()
+  const series = await page.evaluate(() => {
+    const all = JSON.parse(localStorage.getItem('bookingpro:bookings:v1') || '[]')
+    const ids = all.filter((b) => b.seriesId).map((b) => b.seriesId)
+    return Math.max(
+      0,
+      ...Object.values(ids.reduce((m, id) => ({ ...m, [id]: (m[id] ?? 0) + 1 }), {})),
+    )
+  })
+  console.log(
+    said > 0 && series >= 2
+      ? `✓ a weekly booking makes a series (${series} weeks)`
+      : `✗ weekly (toast=${said}, series=${series})`,
+  )
+}
+
+await go('/', 'home-sports', 800)
+{
+  // Courts are a kind of business the landing page speaks to.
+  const text = await page.locator('main').innerText()
+  console.log(
+    /الملاعب والنوادي الرياضية|الملاعب/.test(text)
+      ? '✓ courts are offered as a kind of business'
+      : '✗ no sports sector on the landing page',
+  )
+}
+
+// --- a class: seats in a weekly session ---------------------------------------
+await go('/app/settings?tab=services', 'app-settings-class', 800)
+{
+  await page
+    .getByRole('button', { name: /تنظيف بشرة عميق/ })
+    .first()
+    .click()
+  await page.waitForTimeout(400)
+  const dialog = page.getByRole('dialog')
+  await dialog.locator('[data-group]').getByLabel('حصة جماعية بعدد مقاعد').check()
+  await dialog.getByLabel('وقت الحصة 1').fill('10:00')
+  await dialog.getByRole('button', { name: 'حفظ' }).click()
+  await page.waitForTimeout(400)
+
+  const book = async () => {
+    await go('/book', 'guest-book-class', 800)
+    await page.getByRole('radio', { name: /تنظيف بشرة عميق/ }).click()
+    await page.waitForTimeout(400)
+    const first = page.locator('[data-sessions] [role="radio"]:not([disabled])').first()
+    const line = await first.innerText()
+    await first.click()
+    await page.getByLabel(/الاسم الكامل/).fill('مشتركة')
+    await page.getByLabel(/رقم الجوال/).fill('0501112222')
+    await page.getByRole('button', { name: 'تأكيد الحجز' }).first().click()
+    await page.waitForTimeout(500)
+    if (await page.getByText('أدخل رمز التحقق').count()) {
+      const t = await page.locator('[data-sonner-toast]').last().innerText()
+      await page.keyboard.type(t.match(/\d{4}/)?.[0] ?? '')
+    }
+    await page.waitForTimeout(900)
+    return line
+  }
+  const before = await book()
+  const after = await book()
+  console.log(
+    /10 مقعداً متاحاً/.test(before) && /9 مقعداً متاحاً/.test(after)
+      ? '✓ a class seats several people in one session, and counts down'
+      : `✗ class seats (before="${before.replace(/\n/g, ' ')}", after="${after.replace(/\n/g, ' ')}")`,
   )
 }
 

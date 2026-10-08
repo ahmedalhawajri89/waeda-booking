@@ -41,8 +41,13 @@ export const useSettingsStore = defineStore('settings', () => {
         category: s.category ?? null,
         description: s.description,
         durationMin: s.durationMin,
+        durationOptions: s.durationOptions?.length ? [...s.durationOptions] : null,
         bufferMin: s.bufferMin,
         priceMinor: s.priceMinor,
+        peakFrom: s.peakFrom ?? null,
+        peakPriceMinor: s.peakPriceMinor ?? null,
+        capacity: s.capacity ?? 1,
+        sessions: (s.sessions ?? []).map((x) => ({ ...x })),
         resourceIds: [...s.resourceIds],
         iconKey: iconKeyOf(s.id),
         isActive: s.isActive,
@@ -139,7 +144,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   function newResource() {
-    return { id: uid('r_'), name: '', role: '', gender: null, isActive: true }
+    return { id: uid('r_'), name: '', role: '', gender: null, kind: 'person', isActive: true }
   }
 
   function toggleResource(id) {

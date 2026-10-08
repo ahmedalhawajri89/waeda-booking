@@ -10,6 +10,7 @@ use App\Models\Service;
 use App\Services\Subscription;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -35,7 +36,7 @@ class CatalogController extends Controller
         // the inactive ones to switch them back on, so an operator sees all.
         $onlyActive = ! ($request->user()?->isOperator() && $request->user()->org_id === $org);
 
-        $services = Service::with('resources:id')->where('org_id', $org)
+        $services = Service::with(['resources:id', 'sessions'])->where('org_id', $org)
             ->when($onlyActive, fn ($q) => $q->where('is_active', true))
             ->orderBy('sort_order')->orderBy('name')->orderBy('id')->get();
         $resources = Resource::where('org_id', $org)
@@ -57,8 +58,18 @@ class CatalogController extends Controller
                 'category' => $s->category,
                 'description' => $s->description ?? '',
                 'durationMin' => $s->duration_min,
+                'durationOptions' => $s->duration_options,
                 'bufferMin' => $s->buffer_min,
                 'priceMinor' => $s->price_minor,
+                'peakFrom' => $s->peak_from ? substr((string) $s->peak_from, 0, 5) : null,
+                'peakPriceMinor' => $s->peak_price_minor,
+                'capacity' => $s->capacity ?? 1,
+                'sessions' => $s->sessions->map(fn ($x) => [
+                    'id' => $x->id,
+                    'weekday' => $x->weekday,
+                    'time' => substr((string) $x->start_time, 0, 5),
+                    'resourceId' => $x->resource_id,
+                ])->all(),
                 'resourceIds' => $s->resources->pluck('id')->all(),
                 'iconKey' => $s->icon_key,
                 'isActive' => $s->is_active,
@@ -68,6 +79,7 @@ class CatalogController extends Controller
                 'name' => $r->name,
                 'role' => $r->role,
                 'gender' => $r->gender,
+                'kind' => $r->kind ?? 'person',
                 'isActive' => $r->is_active,
             ])->all(),
             'businessHours' => $hours->map(fn (BusinessHour $h) => [
@@ -100,6 +112,15 @@ class CatalogController extends Controller
             'services.*.durationMin' => ['required', 'integer', 'min:1'],
             'services.*.bufferMin' => ['required', 'integer', 'min:0'],
             'services.*.priceMinor' => ['required', 'integer', 'min:0'],
+            'services.*.durationOptions' => ['nullable', 'array', 'max:6'],
+            'services.*.durationOptions.*' => ['integer', 'between:5,600', 'distinct'],
+            'services.*.peakFrom' => ['nullable', 'date_format:H:i'],
+            'services.*.peakPriceMinor' => ['nullable', 'integer', 'min:0'],
+            'services.*.capacity' => ['nullable', 'integer', 'between:1,500'],
+            'services.*.sessions' => ['nullable', 'array', 'max:60'],
+            'services.*.sessions.*.weekday' => ['required', 'integer', 'between:0,6'],
+            'services.*.sessions.*.time' => ['required', 'date_format:H:i'],
+            'services.*.sessions.*.resourceId' => ['required', 'string'],
             'services.*.resourceIds' => ['array'],
             'services.*.iconKey' => ['required', 'string', 'max:64'],
             'services.*.isActive' => ['required', 'boolean'],
@@ -108,6 +129,7 @@ class CatalogController extends Controller
             'resources.*.name' => ['required', 'string', 'max:255'],
             'resources.*.role' => ['nullable', 'string', 'max:120'],
             'resources.*.gender' => ['nullable', 'in:female,male'],
+            'resources.*.kind' => ['nullable', 'in:person,place'],
             'business' => ['array'],
             'business.name' => ['sometimes', 'required', 'string', 'min:2', 'max:255'],
             'business.category' => ['nullable', 'string', 'max:64'],
@@ -184,7 +206,7 @@ class CatalogController extends Controller
                 $this->assertNotForeign(Resource::class, $r['id'], $org);
                 Resource::updateOrCreate(
                     ['id' => $r['id']],
-                    ['org_id' => $org, 'name' => $r['name'], 'role' => $r['role'] ?? null, 'gender' => $r['gender'] ?? null, 'is_active' => $r['isActive'], 'sort_order' => $i]
+                    ['org_id' => $org, 'name' => $r['name'], 'role' => $r['role'] ?? null, 'gender' => $r['gender'] ?? null, 'kind' => $r['kind'] ?? 'person', 'is_active' => $r['isActive'], 'sort_order' => $i]
                 );
             }
 
@@ -203,6 +225,11 @@ class CatalogController extends Controller
                         'duration_min' => $s['durationMin'],
                         'buffer_min' => $s['bufferMin'],
                         'price_minor' => $s['priceMinor'],
+                        // The default length is always one of the offered ones.
+                        'duration_options' => empty($s['durationOptions']) ? null
+                            : array_values(array_unique([...array_map('intval', $s['durationOptions']), (int) $s['durationMin']])),
+                        'peak_from' => ($s['peakFrom'] ?? null) && isset($s['peakPriceMinor']) ? $s['peakFrom'] : null,
+                        'peak_price_minor' => ($s['peakFrom'] ?? null) && isset($s['peakPriceMinor']) ? $s['peakPriceMinor'] : null,
                         'icon_key' => $s['iconKey'],
                         'is_active' => $s['isActive'],
                         'sort_order' => $i,
@@ -211,6 +238,23 @@ class CatalogController extends Controller
                 // The link table is a set, not a row to patch: replacing it is
                 // the only way an unchecked resource actually goes away.
                 $service->resources()->sync($s['resourceIds'] ?? []);
+                $service->forceFill(['capacity' => max(1, (int) ($s['capacity'] ?? 1))])->save();
+
+                // A class's weekly times: the list is the whole set, on this
+                // business's own staff and places only.
+                if (array_key_exists('sessions', $s)) {
+                    $mine = Resource::where('org_id', $org)->pluck('id')->flip();
+                    $service->sessions()->delete();
+                    foreach ($s['sessions'] ?? [] as $x) {
+                        if (! $mine->has($x['resourceId'])) {
+                            continue;
+                        }
+                        $service->sessions()->create([
+                            'id' => (string) Str::uuid(), 'org_id' => $org,
+                            'resource_id' => $x['resourceId'], 'weekday' => $x['weekday'], 'start_time' => $x['time'],
+                        ]);
+                    }
+                }
             }
 
             if (array_key_exists('prayer', $data)) {

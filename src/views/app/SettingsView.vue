@@ -12,6 +12,7 @@ import {
   UserRound,
   Users,
   CreditCard,
+  Pencil,
 } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { businessHours, resources, services } from '@/data/catalog'
@@ -33,6 +34,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import SpecialPeriodsPanel from '@/components/settings/SpecialPeriodsPanel.vue'
 import PrayerPanel from '@/components/settings/PrayerPanel.vue'
 import PlanPanel from '@/components/settings/PlanPanel.vue'
+import { DURATIONS } from '@/data/businessTemplates'
 import { useSubscriptionStore } from '@/stores/subscription'
 import GuardPolicyForm from '@/components/guard/GuardPolicyForm.vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -102,8 +104,13 @@ function editService(id) {
     category: s.category ?? '',
     description: s.description,
     durationMin: s.durationMin,
+    durationOptions: [...(s.durationOptions ?? [])],
     bufferMin: s.bufferMin,
     priceMinor: s.priceMinor,
+    peakFrom: s.peakFrom ?? null,
+    peakPriceMinor: s.peakPriceMinor ?? null,
+    capacity: s.capacity ?? 1,
+    sessions: (s.sessions ?? []).map((x) => ({ ...x })),
     resourceIds: [...s.resourceIds],
     iconKey: settings.iconKeyOf(s.id),
     isActive: s.isActive,
@@ -136,6 +143,62 @@ const priceMajor = computed({
     if (editing.value) editing.value.priceMinor = Math.max(0, Math.round(Number(v) * 100) || 0)
   },
 })
+
+/**
+ * Lengths a customer may choose (a court for 60, 90 or 120). The default
+ * length is always one of them; with one length there is nothing to choose.
+ */
+function toggleLength(d) {
+  const list = new Set(editing.value.durationOptions ?? [])
+  if (d === editing.value.durationMin) return
+  list.has(d) ? list.delete(d) : list.add(d)
+  editing.value.durationOptions = [...list].sort((a, b) => a - b)
+}
+/** A dearer price from an hour of the evening on; blank is no peak. */
+const peakOn = computed({
+  get: () => !!editing.value?.peakFrom,
+  set: (on) => {
+    if (!editing.value) return
+    editing.value.peakFrom = on ? '17:00' : null
+    editing.value.peakPriceMinor = on ? editing.value.priceMinor : null
+  },
+})
+const peakMajor = computed({
+  get: () => String((editing.value?.peakPriceMinor ?? 0) / 100),
+  set: (v) => {
+    if (editing.value) editing.value.peakPriceMinor = Math.max(0, Math.round(Number(v) * 100) || 0)
+  },
+})
+
+/**
+ * A class: several seats at set weekly times. Off is a one-to-one service
+ * (capacity 1, no sessions).
+ */
+const groupOn = computed({
+  get: () => (editing.value?.capacity ?? 1) > 1,
+  set: (on) => {
+    if (!editing.value) return
+    editing.value.capacity = on ? 10 : 1
+    editing.value.sessions = on
+      ? [
+          {
+            weekday: 0,
+            time: '18:00',
+            resourceId: editing.value.resourceIds[0] ?? resources[0]?.id,
+          },
+        ]
+      : []
+  },
+})
+const capacityInput = numberField('capacity', 2)
+function addSession() {
+  const last = editing.value.sessions.at(-1)
+  editing.value.sessions.push({
+    weekday: last ? (last.weekday + 2) % 7 : 0,
+    time: last?.time ?? '18:00',
+    resourceId: last?.resourceId ?? editing.value.resourceIds[0] ?? resources[0]?.id,
+  })
+}
 
 const canSaveService = computed(
   () =>
@@ -264,7 +327,6 @@ async function resetData() {
 <template>
   <div class="w-full p-4 lg:p-6 2xl:px-8">
     <header class="mb-5">
-      <h1 class="type-h3 text-fg">الإعدادات</h1>
       <p class="text-fg-subtle text-sm">كل ما يراه عملاؤك في صفحة الحجز يُضبط من هنا.</p>
     </header>
 
@@ -400,23 +462,40 @@ async function resetData() {
               {{ g.name }}
             </p>
             <ul class="divide-border divide-y">
-              <li v-for="s in g.items" :key="s.id" class="flex items-center gap-3 px-4 py-3">
+              <li
+                v-for="s in g.items"
+                :key="s.id"
+                class="group hover:bg-surface-hover flex items-center gap-3 px-4 py-3 transition-colors"
+              >
                 <component
                   :is="s.icon"
                   class="text-fg-subtle h-5 w-5 shrink-0"
                   aria-hidden="true"
                 />
-                <button type="button" class="min-w-0 flex-1 text-start" @click="editService(s.id)">
-                  <p
-                    class="text-fg truncate text-sm font-semibold"
-                    :class="!s.isActive && 'opacity-50'"
-                  >
-                    {{ s.name }}
-                  </p>
-                  <p class="text-fg-subtle text-xs">
-                    {{ duration(s.durationMin) }} · فاصل {{ duration(s.bufferMin) }}
-                    <span v-if="!s.isActive"> · معطّلة</span>
-                  </p>
+                <!-- the row opens the service; the pencil says so -->
+                <button
+                  type="button"
+                  class="flex min-w-0 flex-1 items-center gap-2 text-start"
+                  data-edit-row
+                  @click="editService(s.id)"
+                >
+                  <span class="min-w-0 flex-1">
+                    <p
+                      class="text-fg truncate text-sm font-semibold"
+                      :class="!s.isActive && 'opacity-50'"
+                    >
+                      {{ s.name }}
+                    </p>
+                    <p class="text-fg-subtle text-xs">
+                      {{ duration(s.durationMin) }} · فاصل {{ duration(s.bufferMin) }}
+                      <span v-if="!s.isActive"> · معطّلة</span>
+                    </p>
+                  </span>
+                  <span class="sr-only">تعديل</span>
+                  <Pencil
+                    class="text-fg-faint group-hover:text-fg h-3.5 w-3.5 shrink-0 transition-colors"
+                    aria-hidden="true"
+                  />
                 </button>
                 <span class="text-fg shrink-0 text-sm font-bold" data-numeric>
                   {{ money(s.priceMinor) }}
@@ -506,7 +585,11 @@ async function resetData() {
             <BaseButton size="sm" :icon="Plus" @click="addStaff"> إضافة </BaseButton>
           </header>
           <ul class="divide-border divide-y">
-            <li v-for="r in resources" :key="r.id" class="flex items-center gap-3 px-4 py-2.5">
+            <li
+              v-for="r in resources"
+              :key="r.id"
+              class="group hover:bg-surface-hover flex items-center gap-3 px-4 py-2.5 transition-colors"
+            >
               <span
                 class="bg-surface-sunken text-fg grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold"
                 :class="!r.isActive && 'opacity-50'"
@@ -515,14 +598,23 @@ async function resetData() {
               >
               <button
                 type="button"
-                class="min-w-0 flex-1 text-start"
+                class="flex min-w-0 flex-1 items-center gap-2 text-start"
                 :class="!r.isActive && 'opacity-50'"
+                data-edit-row
                 @click="editingResource = { role: '', ...r }"
               >
-                <span class="text-fg block text-sm font-semibold">{{ r.name }}</span>
-                <span class="text-fg-subtle block text-xs"
-                  >{{ r.role || 'بلا وظيفة' }}<template v-if="!r.isActive"> · معطّل</template></span
-                >
+                <span class="min-w-0 flex-1">
+                  <span class="text-fg block text-sm font-semibold">{{ r.name }}</span>
+                  <span class="text-fg-subtle block text-xs"
+                    >{{ r.kind === 'place' ? 'مكان' : r.role || 'بلا وظيفة'
+                    }}<template v-if="!r.isActive"> · معطّل</template></span
+                  >
+                </span>
+                <span class="sr-only">تعديل</span>
+                <Pencil
+                  class="text-fg-faint group-hover:text-fg h-3.5 w-3.5 shrink-0 transition-colors"
+                  aria-hidden="true"
+                />
               </button>
               <BaseButton size="sm" variant="ghost" @click="toggleStaff(r)">
                 {{ r.isActive ? 'تعطيل' : 'تفعيل' }}
@@ -600,6 +692,118 @@ async function resetData() {
           <BaseInput v-model="priceMajor" label="السعر (ر.س)" type="number" />
         </div>
 
+        <!-- lengths the customer chooses, and the evening price -->
+        <fieldset>
+          <legend class="text-fg-muted mb-1.5 text-[13px] font-semibold">مدد يختارها العميل</legend>
+          <div class="flex flex-wrap gap-2" data-length-options>
+            <button
+              v-for="d in DURATIONS"
+              :key="d"
+              type="button"
+              role="checkbox"
+              :aria-checked="d === editing.durationMin || editing.durationOptions?.includes(d)"
+              :disabled="d === editing.durationMin"
+              class="rounded-full border px-3 py-1 text-xs font-semibold transition-colors"
+              :class="
+                d === editing.durationMin || editing.durationOptions?.includes(d)
+                  ? 'border-fg bg-fg text-canvas'
+                  : 'border-border text-fg-muted hover:bg-surface-hover'
+              "
+              @click="toggleLength(d)"
+            >
+              {{ duration(d) }}
+            </button>
+          </div>
+          <p class="text-fg-subtle mt-1.5 text-xs">
+            السعر أعلاه للمدة الأساسية، والمدد الأطول بنفس النسبة. مثلاً ملعب ساعة ونصف بسعر ساعة
+            ونصف.
+          </p>
+        </fieldset>
+
+        <!-- a class: seats and weekly times -->
+        <div class="border-border rounded-[var(--radius-md)] border p-3" data-group>
+          <label class="flex items-center gap-2 text-sm font-semibold">
+            <input v-model="groupOn" type="checkbox" class="accent-primary h-4 w-4" />
+            حصة جماعية بعدد مقاعد
+          </label>
+          <p class="text-fg-subtle mt-1 text-xs">
+            مثل دورة أو حصة يوغا: مواعيد ثابتة كل أسبوع، ويحجز كل عميل مقعداً.
+          </p>
+          <div v-if="groupOn" class="mt-3 space-y-3">
+            <BaseInput v-model="capacityInput" label="عدد المقاعد في كل حصة" type="number" />
+            <p class="text-fg-muted text-[13px] font-semibold">المواعيد الأسبوعية</p>
+            <ul class="space-y-2">
+              <li
+                v-for="(x, i) in editing.sessions"
+                :key="i"
+                class="flex flex-wrap items-center gap-2"
+              >
+                <select
+                  v-model.number="x.weekday"
+                  class="border-border bg-surface text-fg h-9 rounded-[var(--radius-md)] border px-2 text-sm"
+                  :aria-label="`يوم الحصة ${i + 1}`"
+                >
+                  <option v-for="(d, w) in WEEKDAYS" :key="w" :value="w">{{ d }}</option>
+                </select>
+                <input
+                  v-model="x.time"
+                  type="time"
+                  class="border-border bg-surface text-fg h-9 rounded-[var(--radius-md)] border px-2 text-sm"
+                  dir="ltr"
+                  :aria-label="`وقت الحصة ${i + 1}`"
+                />
+                <select
+                  v-model="x.resourceId"
+                  class="border-border bg-surface text-fg h-9 min-w-0 flex-1 rounded-[var(--radius-md)] border px-2 text-sm"
+                  :aria-label="`مع من أو أين الحصة ${i + 1}`"
+                >
+                  <option
+                    v-for="r in resources.filter((r) => editing.resourceIds.includes(r.id))"
+                    :key="r.id"
+                    :value="r.id"
+                  >
+                    {{ r.name }}
+                  </option>
+                </select>
+                <button
+                  type="button"
+                  class="text-fg-subtle hover:text-danger-700 px-1 text-sm"
+                  :aria-label="`حذف الحصة ${i + 1}`"
+                  @click="editing.sessions.splice(i, 1)"
+                >
+                  ✕
+                </button>
+              </li>
+            </ul>
+            <BaseButton size="sm" variant="ghost" :icon="Plus" @click="addSession"
+              >أضف موعداً أسبوعياً</BaseButton
+            >
+          </div>
+        </div>
+
+        <div class="border-border rounded-[var(--radius-md)] border p-3">
+          <label class="flex items-center gap-2 text-sm font-semibold">
+            <input v-model="peakOn" type="checkbox" class="accent-primary h-4 w-4" />
+            سعر مختلف في وقت الذروة
+          </label>
+          <div v-if="peakOn" class="mt-3 grid gap-3 sm:grid-cols-2">
+            <label class="block">
+              <span class="text-fg-muted mb-1.5 block text-[13px] font-semibold">من الساعة</span>
+              <input
+                v-model="editing.peakFrom"
+                type="time"
+                class="border-border bg-surface text-fg h-10 w-full rounded-[var(--radius-md)] border px-2 text-sm"
+                dir="ltr"
+                aria-label="بداية الذروة"
+              />
+            </label>
+            <BaseInput v-model="peakMajor" label="سعر الذروة (ر.س)" type="number" />
+          </div>
+          <p v-if="peakOn" class="text-fg-subtle mt-2 text-xs">
+            حتى نهاية الدوام، ويشمل ما بعد منتصف الليل.
+          </p>
+        </div>
+
         <BaseSelect
           v-model="editing.iconKey"
           label="الأيقونة"
@@ -653,14 +857,44 @@ async function resetData() {
       @close="editingResource = null"
     >
       <div v-if="editingResource" class="space-y-4">
-        <BaseInput v-model="editingResource.name" label="الاسم" required />
+        <fieldset>
+          <legend class="text-fg-muted mb-1.5 text-[13px] font-semibold">النوع</legend>
+          <div class="flex gap-2" role="radiogroup" aria-label="النوع">
+            <button
+              v-for="k in [
+                { value: 'person', label: 'شخص' },
+                { value: 'place', label: 'مكان: ملعب، غرفة، قاعة' },
+              ]"
+              :key="k.value"
+              type="button"
+              role="radio"
+              :aria-checked="(editingResource.kind ?? 'person') === k.value"
+              class="rounded-[var(--radius-md)] border px-3 py-2 text-sm font-semibold"
+              :class="
+                (editingResource.kind ?? 'person') === k.value
+                  ? 'border-fg bg-fg text-canvas'
+                  : 'border-border text-fg-muted hover:bg-surface-hover'
+              "
+              @click="editingResource.kind = k.value"
+            >
+              {{ k.label }}
+            </button>
+          </div>
+        </fieldset>
         <BaseInput
+          v-model="editingResource.name"
+          label="الاسم"
+          :placeholder="editingResource.kind === 'place' ? 'مثلاً: ملعب 1' : ''"
+          required
+        />
+        <BaseInput
+          v-if="editingResource.kind !== 'place'"
           v-model="editingResource.role"
           label="الوظيفة"
           placeholder="مثلاً: أخصائية بشرة"
           hint="تظهر لعملائك عند اختيار مع من يحجزون."
         />
-        <fieldset>
+        <fieldset v-if="editingResource.kind !== 'place'">
           <legend class="text-fg-muted mb-1.5 text-[13px] font-semibold">المختص</legend>
           <div class="flex gap-2" role="radiogroup" aria-label="المختص">
             <button

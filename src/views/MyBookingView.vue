@@ -85,6 +85,7 @@ const view = computed(() => {
       reference: b.reference,
       status: b.status,
       acknowledgedAt: b.acknowledgedAt,
+      durationMin: b.durationMin ?? null,
       startAt: b.startAt,
       endAt: b.endAt,
       priceMinor: b.priceMinor,
@@ -228,6 +229,8 @@ const query = computed(() => ({
   service: service.value,
   resources: resource.value ? [resource.value] : [],
   excludeBookingId: view.value?.id,
+  // A booking moves with its own length: a 90-minute court stays 90.
+  durationMin: view.value?.durationMin ?? null,
 }))
 /** Times this booking can move to on a day: free, past the cutoff, not where it is. */
 const movableOn = (day) =>

@@ -35,13 +35,24 @@ class Backfill
             && ! $this->taken($b, $bookings));
     }
 
-    /** Has the freed time been booked again — by anyone? */
+    /**
+     * Has the freed time been booked again — by anyone? For a class, a freed
+     * seat is still free while the session is below its capacity.
+     */
     public function taken(Booking $freed, Collection $bookings): bool
     {
-        return $bookings->contains(fn (Booking $b) => $b->id !== $freed->id
+        $over = $bookings->filter(fn (Booking $b) => $b->id !== $freed->id
             && $b->resource_id === $freed->resource_id
             && in_array($b->status, Booking::BLOCKING, true)
             && $b->start_at->lt($freed->end_at) && $freed->start_at->lt($b->end_at));
+
+        $capacity = $freed->service?->capacity ?? 1;
+        if ($capacity <= 1) {
+            return $over->isNotEmpty();
+        }
+        $same = $over->filter(fn (Booking $b) => $b->service_id === $freed->service_id && $b->start_at->equalTo($freed->start_at));
+
+        return $same->count() !== $over->count() || $same->count() >= $capacity;
     }
 
     /**

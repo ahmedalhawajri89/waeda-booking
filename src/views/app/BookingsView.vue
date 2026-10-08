@@ -79,7 +79,13 @@ function matchesQuick(b) {
   switch (quick.value) {
     case 'upcoming':
       // A search looks everywhere: the booking you are hunting for may be past.
-      return query.value.trim() !== '' || start >= startOfDay(new Date())
+      // Otherwise: not started yet, or earlier today and still not closed —
+      // a visit already finished this morning is history, not "upcoming".
+      return (
+        query.value.trim() !== '' ||
+        start >= new Date() ||
+        ((b.status === 'pending' || b.status === 'confirmed') && start >= startOfDay(new Date()))
+      )
     case 'today':
       return isSameDay(start, new Date())
     case 'week':
@@ -226,7 +232,6 @@ function exportCsv() {
   <div class="w-full p-4 lg:p-6 2xl:px-8">
     <header class="mb-4 flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 class="type-h3 text-fg">الحجوزات</h1>
         <p class="text-fg-subtle text-sm">كل المواعيد، القادمة والسابقة، مع البحث والتصفية.</p>
       </div>
       <div class="flex items-center gap-3">

@@ -1,6 +1,8 @@
 import { addMinutes, isBefore } from 'date-fns'
 import { time } from './format'
 import { rowFor, windowFor } from './hours'
+import { priceFor } from './pricing'
+import { serviceById } from '@/data/catalog'
 
 /** Statuses that occupy their slot. Cancelled and no-show release the time. */
 const BLOCKING = new Set(['pending', 'confirmed'])
@@ -43,10 +45,12 @@ export function isOpenOn(hours, date) {
  * @param {number} [opts.stepMin] Grid granularity in minutes.
  * @param {Date} [opts.now]
  * @param {string} [opts.excludeBookingId] Ignore this booking when testing overlap — used when rescheduling.
+ * @param {number | null} [opts.durationMin] A length the service offers; its own when absent.
  * @returns {import('@/types').Slot[]}
  */
 export function generateSlots(opts) {
   const { date, service, resourceId, bookings, hours, stepMin = 30, excludeBookingId } = opts
+  const durationMin = opts.durationMin ?? service.durationMin
   const now = opts.now ?? new Date()
 
   // The business day that starts on `date`, which may run past midnight.
@@ -54,7 +58,7 @@ export function generateSlots(opts) {
   if (!w) return []
 
   const { open, close } = w
-  const occupied = service.durationMin + service.bufferMin
+  const occupied = durationMin + service.bufferMin
 
   const relevant = bookings.filter(
     (b) =>
@@ -76,12 +80,18 @@ export function generateSlots(opts) {
       cursor = addMinutes(cursor, stepMin)
       continue
     }
-    const taken = relevant.some((b) => overlaps(start, end, new Date(b.startAt), new Date(b.endAt)))
+    const taken = sessionFull(
+      { serviceId: service.id, startAt: start },
+      relevant.filter((b) => overlaps(start, end, new Date(b.startAt), new Date(b.endAt))),
+      service.capacity ?? 1,
+    )
 
     slots.push({
       startAt: start.toISOString(),
       endAt: end.toISOString(),
       label: time(start),
+      // Shown under the time when it differs (the peak): the price is the time's.
+      priceMinor: priceFor(service, start, durationMin, hours),
       state: taken ? 'taken' : isBefore(start, now) ? 'past' : 'available',
     })
 
@@ -96,16 +106,36 @@ export function generateSlots(opts) {
  * @param {{ startAt: string, endAt: string, resourceId: string, id?: string }} candidate
  * @param {import('@/types').Booking[]} bookings
  */
-export function hasConflict(candidate, bookings) {
+export function hasConflict(candidate, bookings, capacityOf = capacityFromCatalog) {
   const start = new Date(candidate.startAt)
   const end = new Date(candidate.endAt)
-  return bookings.some(
+  const over = bookings.filter(
     (b) =>
       b.resourceId === candidate.resourceId &&
       b.id !== candidate.id &&
       BLOCKING.has(b.status) &&
       overlaps(start, end, new Date(b.startAt), new Date(b.endAt)),
   )
+  return sessionFull(candidate, over, capacityOf(candidate.serviceId))
+}
+
+/**
+ * Given what overlaps a booking, is there room for it? A class shares its
+ * time with the other seats of the same session (same service, same start),
+ * up to its capacity; anything else at that time is a clash, as on the
+ * server (BookingWriter::overlaps).
+ */
+function sessionFull(candidate, over, capacity) {
+  if (!capacity || capacity <= 1) return over.length > 0
+  const at = new Date(candidate.startAt).getTime()
+  const same = over.filter(
+    (b) => b.serviceId === candidate.serviceId && new Date(b.startAt).getTime() === at,
+  )
+  return same.length !== over.length || same.length >= capacity
+}
+
+function capacityFromCatalog(serviceId) {
+  return serviceById(serviceId)?.capacity ?? 1
 }
 
 /**

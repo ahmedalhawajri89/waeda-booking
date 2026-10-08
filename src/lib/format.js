@@ -52,6 +52,15 @@ export function relativeDay(iso) {
   return dayLabel(d)
 }
 
+/** "4 إلى 10 أكتوبر", or "28 سبتمبر إلى 4 أكتوبر" across a month. */
+export function weekRange(startIso, endIso) {
+  const start = toDate(startIso)
+  const end = toDate(endIso)
+  const sameMonth = start.getMonth() === end.getMonth()
+  const from = format(start, sameMonth ? 'd' : 'd MMMM', { locale: ar })
+  return `${from} إلى ${format(end, 'd MMMM', { locale: ar })}`
+}
+
 /** "اليوم، 10:00 ص" */
 export function relativeDayTime(iso) {
   return `${relativeDay(iso)}، ${time(iso)}`

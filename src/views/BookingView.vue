@@ -7,6 +7,7 @@ import {
   CalendarPlus,
   Check,
   Clock,
+  MapPin,
   MessageCircle,
   Phone,
   ShieldCheck,
@@ -23,7 +24,9 @@ import BookingTicket from '@/components/booking/BookingTicket.vue'
 import { useBookingsStore } from '@/stores/bookings'
 import { useCustomersStore } from '@/stores/customers'
 import { useSettingsStore } from '@/stores/settings'
-import { bookableResources, bookableServices, services } from '@/data/catalog'
+import { bookableResources, bookableServices, schedule, services } from '@/data/catalog'
+import { durationsOf, priceFor } from '@/lib/pricing'
+import { isGroup } from '@/lib/sessions'
 import { business, initialOf } from '@/data/business'
 import { isConflict } from '@/data/errors'
 import { isDemoBackend } from '@/data/repository'
@@ -92,6 +95,25 @@ const people = computed(() =>
 watch(people, (list) => {
   if (who.value !== ANY && !list.some((p) => p.id === who.value)) who.value = ANY
 })
+/**
+ * A court or a room is booked, not a person: when every option is a place,
+ * the page asks "which court?" instead of "with whom?".
+ */
+const placesOnly = computed(
+  () => allPeople.value.length > 0 && allPeople.value.every((p) => p.kind === 'place'),
+)
+const placeWord = computed(() =>
+  /ملاعب|رياض|بادل/.test(business.category ?? '') ? 'ملعب' : 'مكان',
+)
+const whoLabel = computed(() => (placesOnly.value ? `أي ${placeWord.value}؟` : 'مع من؟'))
+const anyLabel = computed(() => (placesOnly.value ? `أول ${placeWord.value} متاح` : 'أي متاح'))
+
+/* ------------------------------------------------------------- length */
+/** A length the service offers (60, 90, 120 on a court); null is its default. */
+const durationMin = ref(null)
+const durations = computed(() => durationsOf(service.value))
+const length = computed(() => durationMin.value ?? service.value?.durationMin ?? 0)
+
 const GENDERS = [
   { value: 'any', label: 'الكل' },
   { value: 'female', label: 'مختصات' },
@@ -115,7 +137,11 @@ const candidates = computed(() =>
 
 /* --------------------------------------------------------- availability */
 const avail = useGuestAvailability()
-const query = computed(() => ({ service: service.value, resources: candidates.value }))
+const query = computed(() => ({
+  service: service.value,
+  resources: candidates.value,
+  durationMin: durationMin.value,
+}))
 const slots = computed(() => avail.slotsOn(date.value, query.value))
 const freeCount = (day) => avail.freeCount(day, query.value)
 const loadBusy = () => avail.loadBusy(allPeople.value)
@@ -124,12 +150,70 @@ const dayIsFull = computed(
   () => slots.value.length > 0 && !slots.value.some((s) => s.state === 'available'),
 )
 
+/* -------------------------------------------------------------- classes */
+/**
+ * A class is booked by session, not by free time: Sunday 18:30 with Hind,
+ * eight seats left. Each seat is an ordinary booking underneath.
+ */
+const group = computed(() => isGroup(service.value))
+const sessionResource = ref(null)
+const sessionList = computed(() =>
+  group.value ? avail.sessionsFor(service.value, allPeople.value) : [],
+)
+const sessionDays = computed(() => {
+  const days = new Map()
+  for (const s of sessionList.value) {
+    const key = s.startAt.slice(0, 10)
+    if (!days.has(key)) days.set(key, { key, label: fullDate(s.startAt), items: [] })
+    days.get(key).items.push(s)
+  }
+  return [...days.values()]
+})
+function pickSession(s) {
+  sessionResource.value = s.resourceId
+  startAt.value = s.startAt
+}
+// Full is full; taken by something else at that hour is just not available.
+const seatsLine = (s) =>
+  s.blocked
+    ? 'غير متاحة'
+    : s.left === 0
+      ? 'ممتلئة'
+      : s.left === 1
+        ? 'بقي مقعد واحد'
+        : s.left <= 3
+          ? `بقي ${s.left} مقاعد`
+          : `${s.left} مقعداً متاحاً`
+const nameOf = (id) => allPeople.value.find((r) => r.id === id)?.name ?? ''
+
 const chosenSlot = computed(() => slots.value.find((s) => s.startAt === startAt.value) ?? null)
 const resourceId = computed(() =>
-  who.value !== ANY ? who.value : (chosenSlot.value?.resourceId ?? null),
+  group.value
+    ? startAt.value
+      ? sessionResource.value
+      : null
+    : who.value !== ANY
+      ? who.value
+      : (chosenSlot.value?.resourceId ?? null),
 )
 const resourceName = computed(
-  () => people.value.find((r) => r.id === resourceId.value)?.name ?? null,
+  () => allPeople.value.find((r) => r.id === resourceId.value)?.name ?? null,
+)
+
+/**
+ * The price of what is chosen: the time's (peak or not) for the length
+ * chosen. Before a time is picked, the off-peak price for the length.
+ */
+const price = computed(() =>
+  service.value
+    ? startAt.value
+      ? priceFor(service.value, startAt.value, durationMin.value, schedule)
+      : Math.round((service.value.priceMinor * length.value) / service.value.durationMin)
+    : 0,
+)
+/** Worth showing under each time only when times differ in price. */
+const pricedTimes = computed(
+  () => !!service.value?.peakFrom && service.value.peakPriceMinor != null,
 )
 
 /** The soonest free time from now, for the customer who only wants "soon". */
@@ -189,6 +273,7 @@ function saveDraft() {
       JSON.stringify({
         serviceId: serviceId.value,
         who: who.value,
+        durationMin: durationMin.value,
         date: date.value.toISOString(),
         startAt: startAt.value,
         name: name.value,
@@ -204,17 +289,22 @@ function saveDraft() {
 // A new service, person or day voids the chosen time — but not while a draft
 // is being restored, when all of them arrive together and belong together.
 let restoring = false
-watch([serviceId, who, date], () => {
+watch([serviceId, who, date, durationMin], () => {
   if (!restoring) startAt.value = null
 })
 watch(serviceId, async () => {
-  if (!restoring) who.value = ANY
+  if (!restoring) {
+    who.value = ANY
+    durationMin.value = null
+    sessionResource.value = null
+  }
+  if (group.value) await avail.loadSeats(service.value)
   await loadBusy()
   // Land on a day that has something to offer rather than an empty today.
   if (!restoring && !slots.value.some((x) => x.state === 'available') && nearest.value)
     date.value = nearest.value.day
 })
-watch([serviceId, who, date, startAt, name, phone, notes], saveDraft)
+watch([serviceId, who, date, durationMin, startAt, name, phone, notes], saveDraft)
 
 onMounted(async () => {
   await settings.load(!isDemoBackend && !!slug.value)
@@ -232,6 +322,7 @@ onMounted(async () => {
       restoring = true
       serviceId.value = d.serviceId
       who.value = d.who ?? ANY
+      durationMin.value = d.durationMin ?? null
       date.value = new Date(d.date)
       startAt.value = d.startAt ?? null
       name.value = d.name || name.value
@@ -313,10 +404,15 @@ async function book() {
         paymentStatus: 'unpaid',
         channel: 'online',
         notes: notes.value.trim() || undefined,
+        durationMin: durationMin.value,
         byGuest: true,
       })
       reference.value = created.reference
-      booked.value = { startAt: created.startAt, endAt: created.endAt }
+      booked.value = {
+        startAt: created.startAt,
+        endAt: created.endAt,
+        priceMinor: created.priceMinor,
+      }
     } else {
       // The public endpoint computes price, end time and reference itself;
       // these facts are all a guest is trusted to supply.
@@ -328,9 +424,15 @@ async function book() {
         name: name.value.trim(),
         phone: phone.value.trim(),
         notes: notes.value.trim() || undefined,
+        durationMin: durationMin.value,
       })
       reference.value = created.reference
-      booked.value = { startAt: created.startAt ?? startAt.value, endAt: created.endAt ?? null }
+      // The server's price, not this page's estimate.
+      booked.value = {
+        startAt: created.startAt ?? startAt.value,
+        endAt: created.endAt ?? null,
+        priceMinor: created.priceMinor ?? price.value,
+      }
     }
     rememberGuest(name.value.trim(), phone.value.trim())
     localStorage.removeItem(DRAFT_KEY)
@@ -362,8 +464,7 @@ function addToCalendar() {
   if (!booked.value || !service.value) return
   const start = booked.value.startAt
   const end =
-    booked.value.endAt ??
-    new Date(new Date(start).getTime() + service.value.durationMin * 60000).toISOString()
+    booked.value.endAt ?? new Date(new Date(start).getTime() + length.value * 60000).toISOString()
   downloadIcs(
     `${reference.value}.ics`,
     buildIcs({
@@ -416,7 +517,7 @@ const dayTitle = computed(() =>
         :resource-name="resourceName"
         :start-at="booked.startAt"
         :reference="reference"
-        :price-minor="service.priceMinor"
+        :price-minor="booked?.priceMinor ?? price"
       />
 
       <div class="mt-5 grid gap-2.5 sm:grid-cols-2">
@@ -643,7 +744,7 @@ const dayTitle = computed(() =>
               الموعد
             </h2>
             <button
-              v-if="nearest"
+              v-if="nearest && !group"
               type="button"
               class="border-border bg-surface text-fg hover:border-fg-faint flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] font-semibold"
               @click="takeNearest"
@@ -670,10 +771,102 @@ const dayTitle = computed(() =>
             اختر الخدمة أولاً لتظهر الأوقات المتاحة.
           </p>
 
+          <!-- a class: its sessions, each with the seats left -->
+          <div
+            v-else-if="group"
+            class="border-border bg-surface rounded-[var(--radius-lg)] border p-4 sm:p-5"
+            data-sessions
+          >
+            <p class="text-fg-muted mb-3 text-[13px] font-semibold">
+              الحصص القادمة · {{ service.capacity }} مقعداً في كل حصة
+            </p>
+            <p
+              v-if="!sessionList.length"
+              class="bg-surface-sunken text-fg-subtle rounded-[var(--radius-md)] px-4 py-6 text-center text-sm"
+            >
+              لا حصص مجدولة في الأسابيع القادمة.
+            </p>
+            <div v-else class="space-y-4">
+              <div v-for="d in sessionDays" :key="d.key">
+                <p class="text-fg-subtle mb-2 text-xs">{{ d.label }}</p>
+                <div
+                  role="radiogroup"
+                  :aria-label="`حصص ${d.label}`"
+                  class="grid gap-2 sm:grid-cols-2"
+                >
+                  <button
+                    v-for="s in d.items"
+                    :key="s.resourceId + s.startAt"
+                    type="button"
+                    role="radio"
+                    :aria-checked="startAt === s.startAt && sessionResource === s.resourceId"
+                    :disabled="s.left === 0"
+                    class="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border px-3 py-2.5 text-start transition-colors"
+                    :class="
+                      startAt === s.startAt && sessionResource === s.resourceId
+                        ? 'border-primary bg-primary text-white'
+                        : s.left === 0
+                          ? 'border-border text-fg-faint cursor-not-allowed'
+                          : 'border-border text-fg hover:border-fg'
+                    "
+                    @click="pickSession(s)"
+                  >
+                    <span class="min-w-0">
+                      <span class="block font-bold" data-numeric>{{ time(s.startAt) }}</span>
+                      <span class="block truncate text-xs opacity-75">{{
+                        nameOf(s.resourceId)
+                      }}</span>
+                    </span>
+                    <span
+                      class="shrink-0 text-xs font-semibold"
+                      :class="
+                        startAt === s.startAt && sessionResource === s.resourceId
+                          ? ''
+                          : s.left === 0
+                            ? ''
+                            : s.left <= 3
+                              ? 'text-warning-700'
+                              : 'text-success-700'
+                      "
+                      data-numeric
+                      >{{ seatsLine(s) }}</span
+                    >
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div
             v-else
             class="border-border bg-surface space-y-6 rounded-[var(--radius-lg)] border p-4 sm:p-5"
           >
+            <!-- how long, when the service offers more than one length -->
+            <div v-if="durations.length > 1">
+              <p class="text-fg-muted mb-2 text-[13px] font-semibold">المدة</p>
+              <div role="radiogroup" aria-label="المدة" class="flex flex-wrap gap-2" data-durations>
+                <button
+                  v-for="d in durations"
+                  :key="d"
+                  type="button"
+                  role="radio"
+                  :aria-checked="length === d"
+                  class="rounded-[var(--radius-md)] border px-3.5 py-2 text-start text-sm transition-colors"
+                  :class="
+                    length === d
+                      ? 'border-fg bg-fg text-fg-inverse'
+                      : 'border-border text-fg hover:border-fg-faint'
+                  "
+                  @click="durationMin = d === service.durationMin ? null : d"
+                >
+                  <span class="block font-semibold">{{ duration(d) }}</span>
+                  <span class="block text-[11px] opacity-70" data-numeric>{{
+                    money(Math.round((service.priceMinor * d) / service.durationMin))
+                  }}</span>
+                </button>
+              </div>
+            </div>
+
             <!-- who: by gender first, when the team has both -->
             <div v-if="mixed" role="radiogroup" aria-label="المختص" class="flex gap-1" data-gender>
               <button
@@ -692,10 +885,10 @@ const dayTitle = computed(() =>
               </button>
             </div>
             <div v-if="people.length > 1">
-              <p class="text-fg-muted mb-2 text-[13px] font-semibold">مع من؟</p>
-              <div role="radiogroup" aria-label="اختر المختص" class="flex flex-wrap gap-2">
+              <p class="text-fg-muted mb-2 text-[13px] font-semibold">{{ whoLabel }}</p>
+              <div role="radiogroup" :aria-label="whoLabel" class="flex flex-wrap gap-2">
                 <button
-                  v-for="p in [{ id: ANY, name: 'أي متاح' }, ...people]"
+                  v-for="p in [{ id: ANY, name: anyLabel }, ...people]"
                   :key="p.id"
                   type="button"
                   role="radio"
@@ -714,6 +907,7 @@ const dayTitle = computed(() =>
                     aria-hidden="true"
                   >
                     <Zap v-if="p.id === ANY" class="h-3 w-3" />
+                    <MapPin v-else-if="p.kind === 'place'" class="h-3 w-3" />
                     <template v-else>{{ initialOf(p.name) }}</template>
                   </span>
                   <span class="text-start leading-tight">
@@ -758,7 +952,7 @@ const dayTitle = computed(() =>
                       :aria-checked="startAt === s.startAt"
                       :disabled="s.state !== 'available'"
                       :aria-label="s.state === 'available' ? s.label : `${s.label}، غير متاح`"
-                      class="h-10 rounded-[var(--radius-md)] border text-sm font-semibold transition-colors"
+                      class="flex min-h-10 flex-col items-center justify-center rounded-[var(--radius-md)] border py-1 text-sm font-semibold transition-colors"
                       :class="
                         startAt === s.startAt
                           ? 'border-primary bg-primary text-white'
@@ -770,6 +964,11 @@ const dayTitle = computed(() =>
                       @click="startAt = s.startAt"
                     >
                       {{ s.label }}
+                      <span
+                        v-if="pricedTimes && s.state === 'available'"
+                        class="text-[10px] font-medium opacity-70"
+                        >{{ money(s.priceMinor) }}</span
+                      >
                     </button>
                   </div>
                 </div>
@@ -782,7 +981,9 @@ const dayTitle = computed(() =>
             :key="`${serviceId}:${date.toISOString()}`"
             :service-id="serviceId"
             :date="date"
-            :full="dayIsFull"
+            :full="
+              group ? sessionList.length > 0 && sessionList.every((s) => s.left === 0) : dayIsFull
+            "
           />
         </section>
 
@@ -846,9 +1047,9 @@ const dayTitle = computed(() =>
               <dd class="text-fg text-end font-semibold">{{ service?.name ?? '—' }}</dd>
             </div>
             <div class="flex justify-between gap-3">
-              <dt class="text-fg-subtle">مع</dt>
+              <dt class="text-fg-subtle">{{ placesOnly ? placeWord : 'مع' }}</dt>
               <dd class="text-fg font-semibold">
-                {{ resourceName ?? (who === ANY ? 'أي متاح' : '—') }}
+                {{ resourceName ?? (who === ANY ? anyLabel : '—') }}
               </dd>
             </div>
             <div class="flex justify-between gap-3">
@@ -860,14 +1061,14 @@ const dayTitle = computed(() =>
             <div class="flex justify-between gap-3">
               <dt class="text-fg-subtle">المدة</dt>
               <dd class="text-fg font-semibold">
-                {{ service ? duration(service.durationMin) : '—' }}
+                {{ service ? duration(length) : '—' }}
               </dd>
             </div>
           </dl>
           <div class="border-border mt-4 flex items-baseline justify-between border-t pt-4">
             <span class="text-fg-subtle text-sm">الإجمالي</span>
             <span class="text-fg text-xl font-bold" data-numeric>{{
-              service ? money(service.priceMinor) : '—'
+              service ? money(price) : '—'
             }}</span>
           </div>
           <button
@@ -894,7 +1095,7 @@ const dayTitle = computed(() =>
             </p>
             <p class="text-fg-subtle truncate text-xs" data-numeric>
               <template v-if="startAt">{{ fullDate(startAt) }} · {{ time(startAt) }} · </template>
-              {{ service ? money(service.priceMinor) : '' }}
+              {{ service ? money(price) : '' }}
             </p>
           </div>
           <button

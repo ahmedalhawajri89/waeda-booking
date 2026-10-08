@@ -140,14 +140,23 @@ const hoursKey = ref('sat-thu')
 watch(
   () => biz.sector,
   (key) => {
-    services.value = sectorByKey(key).services.map((s) => ({ ...s, keep: true }))
+    const sec = sectorByKey(key)
+    services.value = sec.services.map((s) => ({ ...s, keep: true }))
+    // A club books courts: start with two, and its late hours.
+    if (sec.resourceKind === 'place') {
+      staff.value = [{ name: 'ملعب 1' }, { name: 'ملعب 2' }]
+      hoursKey.value = sec.hoursKey ?? hoursKey.value
+    } else if (staff.value.every((m) => /^ملعب \d+$/.test(m.name))) {
+      staff.value = []
+    }
   },
   { immediate: true },
 )
+const isPlaces = computed(() => sector.value.resourceKind === 'place')
 
 // The owner is the first person on the team unless they say otherwise.
 watch(step, (s) => {
-  if (s === 3 && staff.value.length === 0 && account.fullName.trim())
+  if (s === 3 && staff.value.length === 0 && account.fullName.trim() && !isPlaces.value)
     staff.value = [{ name: account.fullName.trim(), role: '' }]
 })
 
@@ -209,13 +218,22 @@ async function create() {
         category: sector.value.category,
         address: biz.address.trim() || null,
       },
-      staff: staff.value.map((m) => ({ name: m.name, role: m.role || sector.value.staffRole })),
+      staff: staff.value.map((m) =>
+        isPlaces.value
+          ? { name: m.name, kind: 'place' }
+          : { name: m.name, role: m.role || sector.value.staffRole },
+      ),
       services: kept.value.map((s) => ({
         name: s.name.trim(),
         category: s.category,
         durationMin: s.durationMin,
         priceMinor: Math.round(Number(s.price) * 100),
         iconKey: s.iconKey,
+        ...(s.durationOptions ? { durationOptions: s.durationOptions } : {}),
+        ...(s.peakFrom
+          ? { peakFrom: s.peakFrom, peakPriceMinor: Math.round(Number(s.peakPrice) * 100) }
+          : {}),
+        ...(s.capacity > 1 ? { capacity: s.capacity, sessions: s.sessions ?? [] } : {}),
       })),
       hours: HOURS_PRESETS.find((h) => h.key === hoursKey.value).hours,
     })
@@ -637,9 +655,9 @@ const price = (p) => (Number(p) > 0 ? `${Number(p)} ر.س` : 'مجاناً')
 
           <!-- staff -->
           <div class="mb-8">
-            <p class="text-fg mb-1 font-bold">فريقك</p>
+            <p class="text-fg mb-1 font-bold">{{ sector.staffTitle ?? 'فريقك' }}</p>
             <p class="text-fg-subtle mb-3 text-sm">
-              كل شخص له جدول مستقل، وعميلك يقدر يختار مع من يحجز.
+              {{ sector.staffHint ?? 'كل شخص له جدول مستقل، وعميلك يقدر يختار مع من يحجز.' }}
             </p>
             <div class="mb-2 flex flex-wrap gap-2">
               <span
@@ -650,7 +668,7 @@ const price = (p) => (Number(p) > 0 ? `${Number(p)} ر.س` : 'مجاناً')
                 <span
                   class="bg-surface-sunken grid h-6 w-6 place-items-center rounded-full text-[11px] font-bold"
                   aria-hidden="true"
-                  >{{ initialOf(m.name) }}</span
+                  >{{ isPlaces ? m.name.replace(/\D/g, '') || '•' : initialOf(m.name) }}</span
                 >
                 {{ m.name }}
                 <button
@@ -773,11 +791,13 @@ const price = (p) => (Number(p) > 0 ? `${Number(p)} ر.س` : 'مجاناً')
                     }}</span>
                   </li>
                 </TransitionGroup>
-                <p class="text-fg pt-1 text-[11px] font-bold">مع من؟</p>
+                <p class="text-fg pt-1 text-[11px] font-bold">
+                  {{ isPlaces ? 'أي ملعب؟' : 'مع من؟' }}
+                </p>
                 <div class="flex flex-wrap gap-1">
                   <span
                     class="bg-fg text-fg-inverse rounded-full px-2 py-0.5 text-[9px] font-semibold"
-                    >أي متاح</span
+                    >{{ isPlaces ? 'أول ملعب متاح' : 'أي متاح' }}</span
                   >
                   <span
                     v-for="(m, i) in preview.staff.slice(0, 3)"

@@ -131,6 +131,7 @@ export function findOptions(b, wish, { bookings, services, hours, now }) {
       hours,
       now: new Date(now),
       excludeBookingId: b.id,
+      durationMin: b.durationMin ?? null,
     }).filter((s) => s.state === 'available' && s.startAt !== b.startAt)
 
   const fits = (slot) => {
@@ -198,7 +199,10 @@ export function applyReply({
   if (u.intent === 'choose' && live && offer) {
     const target = offer.payload.options[u.option - 1]
     const service = services.find((s) => s.id === b.serviceId)
-    const end = addMinutes(new Date(target), service.durationMin + service.bufferMin).toISOString()
+    const end = addMinutes(
+      new Date(target),
+      (b.durationMin ?? service.durationMin) + service.bufferMin,
+    ).toISOString()
     used = offer.id
     if (hasConflict({ ...b, startAt: target, endAt: end }, bookings)) {
       // Taken since it was offered: say so, and offer again.
@@ -303,6 +307,7 @@ export function applyOfferReply({
         resourceId: freed.resourceId,
         startAt: freed.startAt,
         endAt: freed.endAt,
+        durationMin: freed.durationMin ?? null,
         status: 'confirmed',
         paymentStatus: 'unpaid',
         priceMinor: service?.priceMinor ?? freed.priceMinor,

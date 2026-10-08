@@ -7,11 +7,12 @@ import {
   GraduationCap,
   Scissors,
   Stethoscope,
+  Trophy,
   UtensilsCrossed,
 } from 'lucide-vue-next'
 
 /**
- * One product, six kinds of business. Picking a sector rewrites the booking
+ * One product, seven kinds of business. Picking a sector rewrites the booking
  * page beside it with that sector's own services, people and words, so the
  * visitor sees their business rather than a generic one.
  */
@@ -107,6 +108,26 @@ const SECTORS = [
       { name: 'جلسة خاصة', meta: 'ساعتان', price: 'عربون 150 ر.س' },
     ],
     points: ['كل طاولة أو قسم بجدوله', 'تأكيد قبل الحجز بساعات', 'تعرف أوقات الذروة من الأرقام'],
+  },
+  {
+    key: 'sports',
+    icon: Trophy,
+    label: 'الملاعب والنوادي الرياضية',
+    short: 'الملاعب',
+    line: 'حجز الملاعب بالساعة، بسعر المساء، وحتى الفجر.',
+    business: 'نادي الأوج للبادل',
+    who: 'الملعب',
+    staff: ['ملعب 1', 'ملعب 2', 'أول ملعب متاح'],
+    services: [
+      { name: 'ملعب بادل', meta: '60 · 90 · 120 دقيقة', price: 'من 150 ر.س' },
+      { name: 'ملعب كرة خماسي', meta: '60 · 90 دقيقة', price: 'من 250 ر.س' },
+      { name: 'حجز أسبوعي ثابت', meta: 'كل أسبوع', price: 'بنفس السعر' },
+    ],
+    points: [
+      'العميل يختار المدة، والسعر يتغير معها',
+      'سعر أعلى بعد العصر يُحسب تلقائياً',
+      'دوام حتى الفجر وحجز أسبوعي متكرر',
+    ],
   },
   {
     key: 'any',

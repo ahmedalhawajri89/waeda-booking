@@ -7,7 +7,11 @@
  * sector keys match the ones on the landing page.
  */
 
-/** @typedef {{ name: string, category: string, durationMin: number, price: number, iconKey: string }} TemplateService */
+/**
+ * @typedef {{ name: string, category: string, durationMin: number, price: number, iconKey: string,
+ *   durationOptions?: number[], peakFrom?: string, peakPrice?: number,
+ *   capacity?: number, sessions?: { weekday: number, time: string }[] }} TemplateService
+ */
 
 export const SECTORS = [
   {
@@ -51,7 +55,19 @@ export const SECTORS = [
     staffPlaceholder: 'أ. فهد',
     services: [
       { name: 'حصة خصوصية', category: 'الحصص', durationMin: 60, price: 120, iconKey: 'Sparkles' },
-      { name: 'ورشة جماعية', category: 'الورش', durationMin: 120, price: 300, iconKey: 'Sparkles' },
+      {
+        // A class: twelve seats, Sunday and Tuesday evenings.
+        name: 'ورشة جماعية',
+        category: 'الورش',
+        durationMin: 120,
+        price: 300,
+        iconKey: 'Sparkles',
+        capacity: 12,
+        sessions: [
+          { weekday: 0, time: '18:00' },
+          { weekday: 2, time: '18:00' },
+        ],
+      },
       { name: 'تحديد مستوى', category: 'الحصص', durationMin: 30, price: 0, iconKey: 'Sparkles' },
     ],
   },
@@ -106,6 +122,41 @@ export const SECTORS = [
     ],
   },
   {
+    // A place is booked, not a person: courts, by the hour, dearer in the evening.
+    key: 'sports',
+    category: 'ملاعب ونادي رياضي',
+    label: 'ملاعب أو نادي رياضي',
+    icon: 'Trophy',
+    staffRole: 'ملعب',
+    staffPlaceholder: 'ملعب 1',
+    resourceKind: 'place',
+    staffTitle: 'ملاعبك',
+    staffHint: 'كل ملعب له جدول مستقل، والعميل يحجز أول ملعب متاح أو يختار.',
+    hoursKey: 'late',
+    services: [
+      {
+        name: 'حجز ملعب بادل',
+        category: 'البادل',
+        durationMin: 60,
+        durationOptions: [60, 90, 120],
+        price: 150,
+        peakFrom: '17:00',
+        peakPrice: 200,
+        iconKey: 'Trophy',
+      },
+      {
+        name: 'ملعب كرة خماسي',
+        category: 'كرة القدم',
+        durationMin: 60,
+        durationOptions: [60, 90],
+        price: 250,
+        peakFrom: '18:00',
+        peakPrice: 300,
+        iconKey: 'Trophy',
+      },
+    ],
+  },
+  {
     key: 'any',
     category: 'حجز مواعيد',
     label: 'نشاط آخر',
@@ -143,6 +194,13 @@ export const HOURS_PRESETS = [
     label: 'كل أيام الأسبوع',
     detail: '10 ص إلى 10 م',
     hours: week('10:00', '22:00'),
+  },
+  {
+    // Courts, cafés in Ramadan: the evening runs into the small hours.
+    key: 'late',
+    label: 'مسائي حتى الفجر',
+    detail: '4 م إلى 2 فجراً، كل الأيام',
+    hours: week('16:00', '02:00'),
   },
   {
     key: 'office',

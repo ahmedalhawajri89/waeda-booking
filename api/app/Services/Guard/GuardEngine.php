@@ -244,6 +244,8 @@ class GuardEngine
                         'service_id' => $freed->service_id,
                         'resource_id' => $freed->resource_id,
                         'start_at' => $freed->start_at,
+                        // The freed slot's own length: a 90-minute court is offered as one.
+                        'duration_min' => $freed->duration_min,
                         'status' => 'confirmed',
                         'payment_status' => 'unpaid',
                         'channel' => 'online',

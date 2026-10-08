@@ -145,12 +145,15 @@ export const useAuthStore = defineStore('auth', () => {
    *     priceMinor: number, iconKey?: string }[],
    *   hours: { weekday: number, open: string, close: string, isClosed: boolean }[] }} input
    */
+  const staffKind = (input) => input.staff?.[0]?.kind ?? 'person'
+
   async function signUpBusiness(input) {
     if (isDemoBackend) {
       const staff = input.staff.map((m, i) => ({
         id: `r_${i + 1}_${Date.now().toString(36)}`,
         name: m.name,
         role: m.role || null,
+        kind: m.kind ?? 'person',
         isActive: true,
       }))
       await repository.openBusiness({
@@ -162,8 +165,15 @@ export const useAuthStore = defineStore('auth', () => {
           category: s.category || null,
           description: '',
           durationMin: s.durationMin,
-          bufferMin: 10,
+          durationOptions: s.durationOptions ?? null,
+          // A court is handed straight over; a treatment room needs a turnaround.
+          bufferMin: staffKind(input) === 'place' ? 0 : 10,
           priceMinor: s.priceMinor,
+          peakFrom: s.peakFrom ?? null,
+          peakPriceMinor: s.peakPriceMinor ?? null,
+          // A class starts with its weekly times on the first person or place.
+          capacity: s.capacity ?? 1,
+          sessions: (s.sessions ?? []).map((x) => ({ ...x, resourceId: staff[0].id })),
           resourceIds: staff.map((r) => r.id),
           iconKey: s.iconKey || 'Sparkles',
           isActive: true,

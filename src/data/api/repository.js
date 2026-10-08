@@ -35,6 +35,8 @@ export class ApiRepository {
       // null, not undefined: undefined drops out of the JSON, and the server
       // reads an absent note as "leave it alone" — so it could never be cleared.
       notes: b.notes ?? null,
+      durationMin: b.durationMin ?? null,
+      seriesId: b.seriesId ?? null,
     }
   }
 

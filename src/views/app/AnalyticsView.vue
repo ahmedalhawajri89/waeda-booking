@@ -140,6 +140,25 @@ const revenueChart = computed(() => {
 
 const CHANNEL_LABELS = { online: 'الموقع', phone: 'الهاتف', walk_in: 'الاستقبال' }
 
+/** The channels as a legend in words: each colour, its name, its count and share. */
+const channelLegend = computed(() => {
+  const c = chartColors()
+  const colors = [c.primary, c.accent, c.info]
+  const entries = Object.entries(channels.value)
+  const total = entries.reduce((s, [, n]) => s + n, 0) || 1
+  return entries.map(([k, n], i) => ({
+    key: k,
+    label: CHANNEL_LABELS[k],
+    count: n,
+    share: pct(n / total),
+    color: colors[i],
+  }))
+})
+const lineColors = computed(() => {
+  const c = chartColors()
+  return { revenue: c.primary, bookings: c.accent }
+})
+
 const channelChart = computed(() => {
   const c = chartColors()
   return {
@@ -159,7 +178,8 @@ const channelChart = computed(() => {
       responsive: true,
       maintainAspectRatio: false,
       cutout: '62%',
-      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 14 } } },
+      // The legend is drawn beside the ring in HTML, with counts and shares.
+      plugins: { legend: { display: false } },
     },
   }
 })
@@ -239,7 +259,6 @@ const summary = computed(
   <div class="w-full space-y-6 p-4 lg:p-6 2xl:px-8">
     <header class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 class="type-h3 text-fg">التحليلات</h1>
         <p class="text-fg-subtle text-[13px]">أرقام مشتقة من حجوزاتك، لا تقديرات.</p>
       </div>
       <BaseTabs v-model="days" :items="[...RANGES]" label="المدى الزمني" size="sm" />
@@ -307,7 +326,27 @@ const summary = computed(
       </div>
 
       <section class="surface p-4">
-        <h2 class="type-h3 text-fg mb-4">الإيراد وعدد الحجوزات</h2>
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <h2 class="type-h3 text-fg">الإيراد وعدد الحجوزات</h2>
+          <ul class="text-fg-muted flex flex-wrap gap-4 text-xs" data-legend="revenue">
+            <li class="flex items-center gap-1.5">
+              <span
+                class="h-0.5 w-5 rounded-full"
+                :style="{ background: lineColors.revenue }"
+                aria-hidden="true"
+              />
+              الإيراد المحصَّل (ر.س)
+            </li>
+            <li class="flex items-center gap-1.5">
+              <span
+                class="w-5 border-t-2 border-dashed"
+                :style="{ borderColor: lineColors.bookings }"
+                aria-hidden="true"
+              />
+              عدد الحجوزات
+            </li>
+          </ul>
+        </div>
         <BaseChart
           :config="revenueChart"
           :height="280"
@@ -318,11 +357,25 @@ const summary = computed(
       <div class="grid gap-4 lg:grid-cols-2">
         <section class="surface p-4">
           <h2 class="type-h3 text-fg mb-4">قنوات الحجز</h2>
-          <BaseChart
-            :config="channelChart"
-            :height="240"
-            :summary="`توزيع الحجوزات: الموقع ${channels.online}، الهاتف ${channels.phone}، الاستقبال ${channels.walk_in}.`"
-          />
+          <div class="grid items-center gap-4 sm:grid-cols-[1fr_auto]">
+            <BaseChart
+              :config="channelChart"
+              :height="220"
+              :summary="`توزيع الحجوزات: الموقع ${channels.online}، الهاتف ${channels.phone}، الاستقبال ${channels.walk_in}.`"
+            />
+            <ul class="space-y-2.5 text-sm" data-legend="channels">
+              <li v-for="l in channelLegend" :key="l.key" class="flex items-center gap-2.5">
+                <span
+                  class="h-2.5 w-2.5 shrink-0 rounded-full"
+                  :style="{ background: l.color }"
+                  aria-hidden="true"
+                />
+                <span class="text-fg min-w-16">{{ l.label }}</span>
+                <span class="text-fg font-semibold" data-numeric>{{ l.count }}</span>
+                <span class="text-fg-subtle text-xs" data-numeric>{{ l.share }}</span>
+              </li>
+            </ul>
+          </div>
         </section>
 
         <section class="surface p-4">
@@ -338,7 +391,7 @@ const summary = computed(
       <section class="surface p-4">
         <h2 class="type-h3 text-fg mb-1">أوقات الطلب</h2>
         <p class="text-fg-subtle mb-4 text-[13px]">
-          أكثر الأوقات طلباً حسب اليوم والساعة — يخبرك متى تحتاج طاقة إضافية.
+          أكثر الأوقات طلباً حسب اليوم والساعة، لتعرف متى تحتاج طاقة إضافية.
         </p>
         <DemandHeatmap :cells="heatmap" :from-hour="FROM_HOUR" :to-hour="TO_HOUR" />
       </section>

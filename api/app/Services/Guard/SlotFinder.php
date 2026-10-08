@@ -88,7 +88,7 @@ class SlotFinder
 
         $open = $w['open']->copy();
         $close = $w['close']->copy();
-        $length = $b->service->occupiedMinutes();
+        $length = $b->service->occupiedMinutes($b->duration_min);
 
         $busy = Booking::query()
             ->where('resource_id', $b->resource_id)

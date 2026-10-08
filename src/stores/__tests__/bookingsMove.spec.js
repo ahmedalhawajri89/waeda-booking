@@ -20,7 +20,7 @@ beforeAll(async () => {
   // Cold imports of the store graph are slow on the first run.
   ;({ createPinia, setActivePinia } = await import('pinia'))
   ;({ useBookingsStore } = await import('@/stores/bookings'))
-}, 30000)
+}, 90000)
 
 /** s1 runs on r1 and r2 (30 + 10 min); s2 only on r1. See data/catalog.js. */
 function booking(over = {}) {
@@ -81,5 +81,35 @@ describe('move', () => {
     store.items = [booking()]
     expect(store.reschedule('b1', '2030-03-03T10:00:00.000Z')).toBe(true)
     expect(store.byId('b1').resourceId).toBe('r1')
+  })
+})
+
+describe('lengths and weekly series', () => {
+  it('keeps a chosen length when a booking moves', () => {
+    store.items = [booking({ durationMin: 90, endAt: '2030-03-03T08:40:00.000Z' })]
+    store.move('b1', { startAt: '2030-03-03T09:00:00.000Z' })
+    // 90 minutes and the 10-minute buffer of s1.
+    expect(store.byId('b1').endAt).toBe('2030-03-03T10:40:00.000Z')
+  })
+
+  it('books the same slot every week, and skips a week that is taken', async () => {
+    const { repository } = await import('@/data/repository')
+    repository.createBooking = vi.fn((b) => Promise.resolve({ ...b, reference: 'BK' }))
+    // Week 2 is taken on r1 at 07:00.
+    store.items = [
+      booking({
+        id: 'taken',
+        startAt: '2030-03-10T07:00:00.000Z',
+        endAt: '2030-03-10T07:40:00.000Z',
+      }),
+    ]
+    const { created, skipped } = await store.createWeekly(
+      { customerId: 'c1', serviceId: 's1', resourceId: 'r1', startAt: '2030-03-03T07:00:00.000Z' },
+      3,
+    )
+    expect(created).toHaveLength(2)
+    expect(skipped).toHaveLength(1)
+    expect(new Set(created.map((b) => b.seriesId)).size).toBe(1)
+    expect(store.seriesOf(created[0].seriesId)).toHaveLength(2)
   })
 })

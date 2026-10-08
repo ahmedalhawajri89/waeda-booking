@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { addDays, format, isSameDay, parseISO, startOfDay, startOfWeek } from 'date-fns'
 import { ChevronLeft, ChevronRight, Rows3, Rows4 } from 'lucide-vue-next'
 import { useBookingsStore } from '@/stores/bookings'
-import { fullDate, relativeDay, time } from '@/lib/format'
+import { fullDate, relativeDay, time, weekRange } from '@/lib/format'
 import { schedule, resources } from '@/data/catalog'
 import { useBookingMove } from '@/composables/useBookingMove'
 import { isOpenOn } from '@/lib/availability'
@@ -72,27 +72,27 @@ const weekBookings = computed(() =>
   }),
 )
 
-/** Agenda groups the next 14 days, skipping days with nothing on them. */
+/** The list shows the week on screen, day by day, skipping empty days. */
 const agenda = computed(() => {
   const out = []
-  for (let i = 0; i < 14; i++) {
-    const d = addDays(startOfDay(new Date()), i)
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(weekStart.value, i)
     const items = store.onDay(d).filter((b) => b.status !== 'cancelled')
     if (items.length) out.push({ date: d, items })
   }
   return out
 })
 
-/** One arrow moves whatever unit is on screen. */
+/** One arrow moves whatever unit is on screen: a day, or a week. */
 function shift(direction) {
-  cursor.value = addDays(cursor.value, direction * (mode.value === 'week' ? 7 : 1))
+  cursor.value = addDays(cursor.value, direction * (mode.value === 'day' ? 1 : 7))
 }
 
-const heading = computed(() => {
-  if (mode.value !== 'week') return fullDate(cursor.value)
-  const end = addDays(weekStart.value, 6)
-  return `${relativeDay(weekStart.value)} — ${relativeDay(end)}`
-})
+const heading = computed(() =>
+  mode.value === 'day'
+    ? fullDate(cursor.value)
+    : weekRange(weekStart.value, addDays(weekStart.value, 6)),
+)
 
 function openDay(date) {
   cursor.value = startOfDay(date)
@@ -107,13 +107,13 @@ function openDay(date) {
         <!-- RTL: "previous" points right -->
         <IconButton
           :icon="ChevronRight"
-          :label="mode === 'week' ? 'الأسبوع السابق' : 'اليوم السابق'"
+          :label="mode === 'day' ? 'اليوم السابق' : 'الأسبوع السابق'"
           @click="shift(-1)"
         />
         <div class="min-w-0">
-          <h1 class="text-fg truncate text-base font-bold">{{ heading }}</h1>
+          <h2 class="text-fg truncate text-base font-bold">{{ heading }}</h2>
           <p class="text-fg-subtle text-xs">
-            <template v-if="mode === 'week'">{{ weekBookings.length }} حجز هذا الأسبوع</template>
+            <template v-if="mode !== 'day'">{{ weekBookings.length }} حجز هذا الأسبوع</template>
             <template v-else>
               {{ isOpenOn(schedule, cursor) ? `${dayBookings.length} حجز` : 'مغلق' }}
             </template>
@@ -121,7 +121,7 @@ function openDay(date) {
         </div>
         <IconButton
           :icon="ChevronLeft"
-          :label="mode === 'week' ? 'الأسبوع التالي' : 'اليوم التالي'"
+          :label="mode === 'day' ? 'اليوم التالي' : 'الأسبوع التالي'"
           @click="shift(1)"
         />
       </div>
@@ -201,8 +201,8 @@ function openDay(date) {
       <div v-if="agenda.length === 0" class="surface">
         <EmptyState
           :icon="CalendarX2"
-          title="لا حجوزات في الأسبوعين القادمين"
-          description="شارك رابط صفحة الحجز مع عملائك لتبدأ الحجوزات بالوصول."
+          title="لا حجوزات في هذا الأسبوع"
+          description="انتقل بالسهمين إلى أسبوع آخر، أو شارك رابط صفحة الحجز مع عملائك."
         />
       </div>
     </div>

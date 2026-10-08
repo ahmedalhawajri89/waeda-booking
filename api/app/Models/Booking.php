@@ -15,7 +15,7 @@ class Booking extends Model
     protected $fillable = [
         'id', 'org_id', 'reference', 'customer_id', 'service_id', 'resource_id',
         'start_at', 'end_at', 'status', 'payment_status', 'price_minor',
-        'channel', 'notes',
+        'channel', 'notes', 'duration_min', 'series_id',
     ];
 
     protected function casts(): array
@@ -24,6 +24,7 @@ class Booking extends Model
             'start_at' => 'datetime',
             'end_at' => 'datetime',
             'price_minor' => 'integer',
+            'duration_min' => 'integer',
             'acknowledged_at' => 'datetime',
         ];
     }

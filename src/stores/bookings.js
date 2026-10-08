@@ -1,12 +1,13 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { addMinutes, isAfter } from 'date-fns'
+import { addDays, addMinutes, isAfter } from 'date-fns'
 import { toast } from 'vue-sonner'
 import { repository } from '@/data/repository'
 import { ConflictError, isConflict } from '@/data/errors'
 import { resourceById, schedule, serviceById } from '@/data/catalog'
 import { hasConflict, occupancyFor } from '@/lib/availability'
 import { businessDayOf, sameBusinessDay } from '@/lib/hours'
+import { priceFor } from '@/lib/pricing'
 import { clone } from '@/lib/clone'
 import { dayLabel, time } from '@/lib/format'
 import { useCustomersStore } from './customers'
@@ -110,11 +111,19 @@ export const useBookingsStore = defineStore('bookings', () => {
 
     for (const b of conflicts.value) push(b, 'conflict')
 
+    // A class's twelve seats are one thing to deal with, not twelve: the
+    // first seat stands for the session, and its drawer lists the rest.
+    const sessionSeen = new Set()
     for (const b of sorted.value) {
       const start = new Date(b.startAt).getTime()
       const end = new Date(b.endAt).getTime()
 
       const live = b.status === 'pending' || b.status === 'confirmed'
+      if (live && (serviceById(b.serviceId)?.capacity ?? 1) > 1) {
+        const key = `${b.serviceId}|${b.resourceId}|${b.startAt}`
+        if (sessionSeen.has(key)) continue
+        sessionSeen.add(key)
+      }
 
       // Over, and nobody said whether they came. Pending ones too: a booking
       // nobody confirmed still happened or did not, and the guard learns
@@ -178,7 +187,8 @@ export const useBookingsStore = defineStore('bookings', () => {
    *           status?: import('@/types').BookingStatus,
    *           paymentStatus?: import('@/types').PaymentStatus,
    *           channel?: import('@/types').BookingChannel,
-   *           notes?: string }} input
+   *           notes?: string, durationMin?: number | null, seriesId?: string | null,
+   *           byGuest?: boolean }} input
    * @returns {Promise<import('@/types').Booking>} as saved, with the reference the backend issued
    * @throws {ConflictError} if the slot is taken
    */
@@ -187,7 +197,9 @@ export const useBookingsStore = defineStore('bookings', () => {
     if (!service) throw new Error('unknown service')
 
     const start = new Date(input.startAt)
-    const end = addMinutes(start, service.durationMin + service.bufferMin)
+    // A length the service offers (a 90-minute court); its own when absent.
+    const durationMin = input.durationMin ?? null
+    const end = addMinutes(start, (durationMin ?? service.durationMin) + service.bufferMin)
     const now = new Date().toISOString()
 
     const booking = {
@@ -202,7 +214,10 @@ export const useBookingsStore = defineStore('bookings', () => {
       endAt: end.toISOString(),
       status: input.status ?? 'confirmed',
       paymentStatus: input.paymentStatus ?? 'unpaid',
-      priceMinor: service.priceMinor,
+      // The time's price (peak or not) for the length chosen, as the server prices it.
+      priceMinor: priceFor(service, start, durationMin, schedule),
+      durationMin,
+      seriesId: input.seriesId ?? null,
       channel: input.channel ?? 'phone',
       // Made at the desk is seen at the desk. A guest's booking waits until
       // someone at the business opens or acts on it.
@@ -222,6 +237,31 @@ export const useBookingsStore = defineStore('bookings', () => {
     items.value.push(saved)
     return saved
   }
+
+  /**
+   * The same booking every week — the padel group's Tuesday. Each week is
+   * checked on its own; one that is taken is skipped, not the whole series.
+   * @returns {Promise<{ created: import('@/types').Booking[], skipped: Date[] }>}
+   */
+  async function createWeekly(input, weeks) {
+    const seriesId = crypto.randomUUID()
+    const created = []
+    const skipped = []
+    for (let i = 0; i < weeks; i++) {
+      const startAt = addDays(new Date(input.startAt), 7 * i).toISOString()
+      try {
+        created.push(await create({ ...input, startAt, seriesId }))
+      } catch (e) {
+        if (!(e instanceof ConflictError) && !isConflict(e)) throw e
+        skipped.push(new Date(startAt))
+      }
+    }
+    return { created, skipped }
+  }
+
+  /** The bookings of a weekly series, in order. */
+  const seriesOf = (seriesId) =>
+    seriesId ? sorted.value.filter((b) => b.seriesId === seriesId) : []
 
   function setStatus(id, status) {
     const b = byId(id)
@@ -286,7 +326,8 @@ export const useBookingsStore = defineStore('bookings', () => {
     if (!service.resourceIds.includes(toResource)) return 'not_offered'
 
     const start = new Date(startAt)
-    const end = addMinutes(start, service.durationMin + service.bufferMin)
+    // A booking keeps the length it was made with.
+    const end = addMinutes(start, (b.durationMin ?? service.durationMin) + service.bufferMin)
     const candidate = {
       ...b,
       resourceId: toResource,
@@ -299,6 +340,9 @@ export const useBookingsStore = defineStore('bookings', () => {
     b.resourceId = candidate.resourceId
     b.startAt = candidate.startAt
     b.endAt = candidate.endAt
+    // Into or out of the peak: an unpaid booking takes the new time's price.
+    if (b.paymentStatus === 'unpaid')
+      b.priceMinor = priceFor(service, start, b.durationMin, schedule)
     // From and to, as the API writes it — the log should say what moved.
     const who = (rid) => resourceById(rid)?.name ?? ''
     const changedPerson = before.resourceId !== b.resourceId
@@ -387,6 +431,8 @@ export const useBookingsStore = defineStore('bookings', () => {
     byCustomer,
     forCustomer,
     create,
+    createWeekly,
+    seriesOf,
     setStatus,
     setPayment,
     reschedule,

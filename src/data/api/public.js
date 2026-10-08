@@ -65,3 +65,15 @@ export function rescheduleBooking(reference, phone, startAt) {
     auth: false,
   })
 }
+
+/**
+ * Seats taken in a class's sessions — counts per session, never who.
+ * @param {string} serviceId
+ * @param {string} from  YYYY-MM-DD
+ * @param {string} to    YYYY-MM-DD
+ * @returns {Promise<{ startAt: string, resourceId: string, taken: number }[]>}
+ */
+export function classSeats(serviceId, from, to) {
+  const q = new URLSearchParams({ from, to })
+  return request(`/public/classes/${serviceId}/seats?` + q, { auth: false })
+}

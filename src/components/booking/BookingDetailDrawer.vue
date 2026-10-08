@@ -189,10 +189,69 @@ function bookAgain() {
 }
 
 /** What the "more" menu holds for this booking right now. */
+/**
+ * A class: everyone in this session, with attendance one by one — or all at
+ * once, which is how a trainer actually closes a class.
+ */
+const roster = computed(() => {
+  const b = booking.value
+  if (!b || (view.value?.service?.capacity ?? 1) <= 1) return []
+  return store.items
+    .filter(
+      (x) =>
+        x.serviceId === b.serviceId &&
+        x.resourceId === b.resourceId &&
+        x.startAt === b.startAt &&
+        x.status !== 'cancelled',
+    )
+    .map((x) => ({ b: x, name: store.hydrate(x).customer?.name ?? 'عميل' }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ar'))
+})
+const rosterOpen = computed(() =>
+  roster.value.filter((r) => r.b.status === 'pending' || r.b.status === 'confirmed'),
+)
+function markSeat(id, status) {
+  const before = clone(store.byId(id))
+  store.setStatus(id, status)
+  toast.success(status === 'completed' ? 'سُجّل الحضور' : 'سُجّل الغياب', {
+    action: { label: 'تراجع', onClick: () => store.restore(before) },
+  })
+}
+function allCame() {
+  const before = rosterOpen.value.map((r) => clone(r.b))
+  for (const r of rosterOpen.value) store.setStatus(r.b.id, 'completed')
+  toast.success(`سُجّل حضور ${before.length}`, {
+    action: { label: 'تراجع', onClick: () => before.forEach((x) => store.restore(x)) },
+  })
+}
+
+/** A weekly booking: where this one sits, and the weeks still to come after it. */
+const series = computed(() => (booking.value ? store.seriesOf(booking.value.seriesId) : []))
+const seriesAt = computed(() => series.value.findIndex((b) => b.id === booking.value?.id))
+const laterInSeries = computed(() =>
+  series.value
+    .slice(seriesAt.value + 1)
+    .filter((b) => b.status === 'pending' || b.status === 'confirmed'),
+)
+function cancelRest() {
+  const before = laterInSeries.value.map((b) => clone(b))
+  for (const b of laterInSeries.value) store.setStatus(b.id, 'cancelled')
+  toast.success(`أُلغيت ${before.length} حجوزات بعد هذا الأسبوع`, {
+    action: { label: 'تراجع', onClick: () => before.forEach((b) => store.restore(b)) },
+  })
+}
+
 const moreItems = computed(() => {
   const b = booking.value
   if (!b) return []
   const items = [{ value: 'copy', label: 'نسخ رقم الحجز', icon: Copy }]
+  if (laterInSeries.value.length)
+    items.push({
+      value: 'cancel-rest',
+      label: `إلغاء ما بعده من السلسلة (${laterInSeries.value.length})`,
+      icon: XCircle,
+      separated: true,
+    })
   if (b.paymentStatus === 'paid')
     items.push({ value: 'refund', label: 'إعادة المبلغ', icon: Undo2, separated: true })
   if (live.value)
@@ -217,6 +276,7 @@ async function onMore(v) {
   if (v === 'no_show') setStatus('no_show', 'سُجّل عدم الحضور')
   if (v === 'refund') setPayment('refunded', 'سُجّلت إعادة المبلغ')
   if (v === 'cancel') confirmCancel.value = true
+  if (v === 'cancel-rest') cancelRest()
 }
 function doCancel() {
   confirmCancel.value = false
@@ -580,6 +640,68 @@ const CHANNEL = { online: 'من صفحة الحجز', phone: 'حجز هاتفي'
         </section>
 
         <!-- the last thing that happened, so the log is rarely needed -->
+        <!-- a class: everyone in this session -->
+        <section v-if="roster.length" data-roster aria-labelledby="roster-h">
+          <div class="mb-2 flex items-center justify-between gap-2">
+            <h3 id="roster-h" class="text-fg-subtle text-xs font-semibold">
+              المشاركون في هذه الحصة
+              <span data-numeric>· {{ roster.length }} من {{ view.service.capacity }}</span>
+            </h3>
+            <button
+              v-if="hasStarted && rosterOpen.length > 1"
+              type="button"
+              class="text-success-700 text-xs font-semibold"
+              @click="allCame"
+            >
+              الكل حضر
+            </button>
+          </div>
+          <ul class="border-border divide-border divide-y rounded-[var(--radius-md)] border">
+            <li v-for="r in roster" :key="r.b.id" class="flex items-center gap-2 px-3 py-2">
+              <button
+                type="button"
+                class="min-w-0 flex-1 truncate text-start text-sm"
+                :class="r.b.id === booking.id ? 'text-fg font-bold' : 'text-fg hover:underline'"
+                @click="goTo(r.b.id)"
+              >
+                {{ r.name }}
+              </button>
+              <template
+                v-if="hasStarted && (r.b.status === 'pending' || r.b.status === 'confirmed')"
+              >
+                <button
+                  type="button"
+                  class="border-border text-success-700 hover:bg-success-50 rounded-[var(--radius-sm)] border px-2 py-0.5 text-xs font-semibold"
+                  @click="markSeat(r.b.id, 'completed')"
+                >
+                  حضر
+                </button>
+                <button
+                  type="button"
+                  class="border-border text-danger-700 hover:bg-danger-50 rounded-[var(--radius-sm)] border px-2 py-0.5 text-xs font-semibold"
+                  @click="markSeat(r.b.id, 'no_show')"
+                >
+                  لم يحضر
+                </button>
+              </template>
+              <StatusBadge v-else :status="r.b.status" size="sm" />
+            </li>
+          </ul>
+        </section>
+
+        <p
+          v-if="series.length > 1"
+          class="bg-surface-sunken text-fg-muted flex items-center gap-2 rounded-[var(--radius-md)] px-3 py-2 text-xs"
+          data-series
+        >
+          <CalendarClock class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          حجز أسبوعي ·
+          <span data-numeric>{{ seriesAt + 1 }} من {{ series.length }}</span>
+          <span v-if="laterInSeries.length" class="text-fg-subtle"
+            >· {{ laterInSeries.length }} قادمة</span
+          >
+        </p>
+
         <p v-if="lastEvent" class="text-fg-subtle flex items-start gap-2 text-xs">
           <History class="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span

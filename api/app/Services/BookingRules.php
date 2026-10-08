@@ -44,6 +44,45 @@ class BookingRules
         return $service;
     }
 
+    /**
+     * The length asked for, if the service offers it; null is the service's
+     * own. A length it does not offer is refused, not quietly rounded.
+     *
+     * @throws InvalidBooking
+     */
+    public function duration(Service $service, ?int $asked): ?int
+    {
+        if ($asked === null || $asked === $service->duration_min) {
+            return $asked === null ? null : $asked;
+        }
+        if (! in_array($asked, $service->durations(), true)) {
+            throw new InvalidBooking('duration_not_offered', 'That length is not offered for this service.');
+        }
+
+        return $asked;
+    }
+
+    /**
+     * For a class: the start must be one of its weekly sessions, with that
+     * trainer or in that hall, in the business's own wall-clock time.
+     *
+     * @throws InvalidBooking
+     */
+    public function isSession(string $org, Service $service, string $resourceId, CarbonInterface $start): void
+    {
+        if (! $service->isGroup()) {
+            return;
+        }
+        $tz = \App\Models\Organization::query()->whereKey($org)->value('timezone') ?? 'UTC';
+        $local = $start->copy()->setTimezone($tz);
+        $match = $service->sessions()->where('resource_id', $resourceId)
+            ->where('weekday', (int) $local->format('w'))
+            ->where('start_time', $local->format('H:i:00'))->exists();
+        if (! $match) {
+            throw new InvalidBooking('not_a_session', 'This class does not run at that time.');
+        }
+    }
+
     /** A room taken out of service takes no new bookings. @throws InvalidBooking */
     public function resourceIsActive(string $org, string $resourceId): void
     {

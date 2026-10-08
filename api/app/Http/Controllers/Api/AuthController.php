@@ -125,12 +125,21 @@ class AuthController extends Controller
             'staff.*.name' => ['required', 'string', 'min:2', 'max:255'],
             'staff.*.role' => ['nullable', 'string', 'max:120'],
             'staff.*.gender' => ['nullable', 'in:female,male'],
+            'staff.*.kind' => ['nullable', 'in:person,place'],
             'services' => ['required', 'array', 'min:1', 'max:30'],
             'services.*.name' => ['required', 'string', 'min:2', 'max:255'],
             'services.*.category' => ['nullable', 'string', 'max:64'],
             'services.*.durationMin' => ['required', 'integer', 'between:5,600'],
             'services.*.priceMinor' => ['required', 'integer', 'min:0'],
             'services.*.iconKey' => ['nullable', 'string', 'max:64'],
+            'services.*.durationOptions' => ['nullable', 'array', 'max:6'],
+            'services.*.durationOptions.*' => ['integer', 'between:5,600'],
+            'services.*.peakFrom' => ['nullable', 'date_format:H:i'],
+            'services.*.peakPriceMinor' => ['nullable', 'integer', 'min:0'],
+            'services.*.capacity' => ['nullable', 'integer', 'between:1,500'],
+            'services.*.sessions' => ['nullable', 'array', 'max:30'],
+            'services.*.sessions.*.weekday' => ['required', 'integer', 'between:0,6'],
+            'services.*.sessions.*.time' => ['required', 'date_format:H:i'],
             'hours' => ['required', 'array', 'size:7'],
             'hours.*.weekday' => ['required', 'integer', 'between:0,6', 'distinct'],
             'hours.*.open' => ['required', 'date_format:H:i'],
@@ -169,6 +178,7 @@ class AuthController extends Controller
                 'name' => $m['name'],
                 'role' => $m['role'] ?? null,
                 'gender' => $m['gender'] ?? null,
+                'kind' => $m['kind'] ?? 'person',
                 'is_active' => true,
                 'sort_order' => $i,
             ]));
@@ -182,13 +192,28 @@ class AuthController extends Controller
                     'category' => $s['category'] ?? null,
                     'description' => '',
                     'duration_min' => $s['durationMin'],
-                    'buffer_min' => 10,
+                    // A court is handed straight over; a treatment room needs a turnaround.
+                    'buffer_min' => (($data['staff'][0]['kind'] ?? 'person') === 'place') ? 0 : 10,
                     'price_minor' => $s['priceMinor'],
+                    'duration_options' => empty($s['durationOptions']) ? null
+                        : array_values(array_unique([...array_map('intval', $s['durationOptions']), (int) $s['durationMin']])),
+                    'peak_from' => ($s['peakFrom'] ?? null) && isset($s['peakPriceMinor']) ? $s['peakFrom'] : null,
+                    'peak_price_minor' => ($s['peakFrom'] ?? null) && isset($s['peakPriceMinor']) ? $s['peakPriceMinor'] : null,
                     'icon_key' => $s['iconKey'] ?? 'Sparkles',
                     'is_active' => true,
                     'sort_order' => $i,
                 ]);
                 $service->resources()->sync($staff->pluck('id')->all());
+                // A class starts with its sessions on the first person or place.
+                if (($s['capacity'] ?? 1) > 1) {
+                    $service->forceFill(['capacity' => (int) $s['capacity']])->save();
+                    foreach ($s['sessions'] ?? [] as $x) {
+                        $service->sessions()->create([
+                            'id' => (string) Str::uuid(), 'org_id' => $org->id, 'resource_id' => $staff->first()->id,
+                            'weekday' => $x['weekday'], 'start_time' => $x['time'],
+                        ]);
+                    }
+                }
             }
 
             foreach ($data['hours'] as $h) {

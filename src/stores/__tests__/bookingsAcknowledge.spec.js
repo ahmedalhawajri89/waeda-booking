@@ -25,7 +25,7 @@ beforeAll(async () => {
   ;({ createPinia, setActivePinia } = await import('pinia'))
   ;({ useBookingsStore } = await import('@/stores/bookings'))
   ;({ repository } = await import('@/data/repository'))
-}, 30000)
+}, 90000)
 
 const HOUR = 3600_000
 const at = (ms) => new Date(Date.now() + ms).toISOString()

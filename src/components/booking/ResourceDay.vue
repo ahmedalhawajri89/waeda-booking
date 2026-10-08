@@ -1,9 +1,9 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { addMinutes, differenceInMinutes } from 'date-fns'
-import { GripVertical, Plus } from 'lucide-vue-next'
+import { GripVertical, Plus, Users } from 'lucide-vue-next'
 import { useBookingsStore } from '@/stores/bookings'
-import { schedule } from '@/data/catalog'
+import { schedule, serviceById } from '@/data/catalog'
 import { initialOf } from '@/data/business'
 import { windowFor } from '@/lib/hours'
 import { assignLanes } from '@/lib/lanes'
@@ -97,15 +97,32 @@ onBeforeUnmount(() => clearInterval(clock))
 const columns = computed(() =>
   props.resources.map((r) => {
     const own = dayBookings.value.filter((b) => b.resourceId === r.id)
-    const blocks = assignLanes(
-      own.map((b) => ({
-        id: b.id,
-        top: px(differenceInMinutes(new Date(b.startAt), bounds.value.open)),
-        height: Math.max(px(differenceInMinutes(new Date(b.endAt), new Date(b.startAt))), 26),
-        b,
-        view: store.hydrate(b),
-      })),
-    )
+    // A class's seats are one block — the session — not a dozen side by side.
+    const singles = []
+    const sessions = new Map()
+    for (const b of own) {
+      const capacity = serviceById(b.serviceId)?.capacity ?? 1
+      if (capacity > 1 && b.status !== 'cancelled') {
+        const key = `${b.serviceId}|${b.startAt}`
+        if (!sessions.has(key)) sessions.set(key, { capacity, items: [] })
+        sessions.get(key).items.push(b)
+      } else singles.push(b)
+    }
+    const blockOf = (b, group = null) => ({
+      id: group ? `session:${b.serviceId}|${b.startAt}` : b.id,
+      top: px(differenceInMinutes(new Date(b.startAt), bounds.value.open)),
+      height: Math.max(px(differenceInMinutes(new Date(b.endAt), new Date(b.startAt))), 26),
+      b,
+      view: store.hydrate(b),
+      group,
+    })
+    const blocks = assignLanes([
+      ...singles.map((b) => blockOf(b)),
+      ...[...sessions.values()].map(({ capacity, items }) => {
+        const seated = items.filter((x) => x.status !== 'no_show')
+        return blockOf(seated[0] ?? items[0], { taken: seated.length, capacity })
+      }),
+    ])
     const live = own.filter((b) => b.status !== 'cancelled' && b.status !== 'no_show')
     return { r, blocks, count: live.length }
   }),
@@ -145,6 +162,11 @@ let justDragged = false
 
 function onBlockDown(e, block, colIndex) {
   if (e.button !== 0) return
+  // A session is opened, not dragged: moving one seat would split the class.
+  if (block.group) {
+    emit('open', block.b.id)
+    return
+  }
   drag.value = {
     id: block.id,
     b: block.b,
@@ -218,19 +240,19 @@ const gridStyle = computed(() => ({
     <div class="min-w-full" :style="{ minWidth: `${3.5 + resources.length * 11}rem` }">
       <!-- who -->
       <div class="bg-surface border-border sticky top-0 z-20 grid border-b" :style="gridStyle">
-        <span />
+        <span class="bg-surface sticky start-0 z-10" />
         <div
           v-for="c in columns"
           :key="c.r.id"
           class="border-border flex items-center gap-2.5 border-s px-3 py-2.5"
         >
           <span
-            class="bg-surface-sunken text-fg grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold"
+            class="bg-surface-sunken text-fg hidden h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold sm:grid"
             aria-hidden="true"
             >{{ initialOf(c.r.name) }}</span
           >
           <div class="min-w-0">
-            <p class="text-fg truncate text-sm font-semibold">{{ c.r.name }}</p>
+            <p class="text-fg truncate text-sm font-semibold" :title="c.r.name">{{ c.r.name }}</p>
             <p class="text-fg-subtle truncate text-[11px]">
               <template v-if="c.r.role">{{ c.r.role }} · </template>
               <span data-numeric>{{ c.count }}</span> مواعيد
@@ -241,8 +263,8 @@ const gridStyle = computed(() => ({
 
       <!-- when -->
       <div class="relative grid" :style="[gridStyle, { height: `${px(bounds.totalMin) + 8}px` }]">
-        <!-- hour rail -->
-        <div class="relative">
+        <!-- hour rail: it stays in view while the columns scroll sideways -->
+        <div class="bg-surface sticky start-0 z-[15]" data-hour-rail>
           <span
             v-for="t in ticks.filter((t) => t.label)"
             :key="t.top"
@@ -302,7 +324,9 @@ const gridStyle = computed(() => ({
             class="group absolute z-10 flex touch-none flex-col overflow-hidden rounded-[6px] border px-2 py-1 text-start text-xs transition-shadow hover:shadow-md"
             :class="[
               bookingTone(blk.b.status),
-              MOVABLE.has(blk.b.status) ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer',
+              MOVABLE.has(blk.b.status) && !blk.group
+                ? 'cursor-grab active:cursor-grabbing'
+                : 'cursor-pointer',
               drag?.id === blk.id && drag.moved && 'opacity-40',
             ]"
             :style="{
@@ -311,32 +335,52 @@ const gridStyle = computed(() => ({
               insetInlineStart: `calc(${(blk.lane / blk.lanes) * 100}% + 3px)`,
               width: `calc(${100 / blk.lanes}% - 6px)`,
             }"
-            :aria-label="`${blk.view.customer?.name ?? 'عميل'}، ${blk.view.service?.name ?? ''}، ${timeRange(blk.b.startAt, blk.b.endAt)}، ${BOOKING_STATUS[blk.b.status].label}`"
+            :aria-label="
+              blk.group
+                ? `${blk.view.service?.name ?? ''}، ${blk.group.taken} من ${blk.group.capacity}، ${timeRange(blk.b.startAt, blk.b.endAt)}`
+                : `${blk.view.customer?.name ?? 'عميل'}، ${blk.view.service?.name ?? ''}، ${timeRange(blk.b.startAt, blk.b.endAt)}، ${BOOKING_STATUS[blk.b.status].label}`
+            "
+            :data-session="blk.group ? '' : undefined"
             @pointerdown="onBlockDown($event, blk, i)"
             @pointermove="onBlockMove"
             @pointerup="onBlockUp"
             @pointercancel="drag = null"
-            @keydown.enter.prevent="emit('open', blk.id)"
+            @keydown.enter.prevent="emit('open', blk.b.id)"
           >
-            <span class="flex items-center gap-1">
-              <component
-                :is="BOOKING_STATUS[blk.b.status].icon"
-                class="h-3 w-3 shrink-0"
-                aria-hidden="true"
-              />
-              <span class="truncate font-semibold">{{ blk.view.customer?.name ?? 'عميل' }}</span>
-              <GripVertical
-                v-if="MOVABLE.has(blk.b.status)"
-                class="ms-auto h-3 w-3 shrink-0 opacity-0 group-hover:opacity-50"
-                aria-hidden="true"
-              />
-            </span>
-            <span v-if="blk.height > 34" class="truncate opacity-80">{{
-              blk.view.service?.name
-            }}</span>
-            <span v-if="blk.height > 52" class="truncate opacity-70" data-numeric>{{
-              timeRange(blk.b.startAt, blk.b.endAt)
-            }}</span>
+            <!-- a class: the session, how full it is -->
+            <template v-if="blk.group">
+              <span class="flex items-center gap-1">
+                <Users class="h-3 w-3 shrink-0" aria-hidden="true" />
+                <span class="truncate font-semibold">{{ blk.view.service?.name }}</span>
+                <span class="ms-auto shrink-0 font-bold" data-numeric
+                  >{{ blk.group.taken }}/{{ blk.group.capacity }}</span
+                >
+              </span>
+              <span v-if="blk.height > 34" class="truncate opacity-75" data-numeric>{{
+                timeRange(blk.b.startAt, blk.b.endAt)
+              }}</span>
+            </template>
+            <template v-else>
+              <span class="flex items-center gap-1">
+                <component
+                  :is="BOOKING_STATUS[blk.b.status].icon"
+                  class="h-3 w-3 shrink-0"
+                  aria-hidden="true"
+                />
+                <span class="truncate font-semibold">{{ blk.view.customer?.name ?? 'عميل' }}</span>
+                <GripVertical
+                  v-if="MOVABLE.has(blk.b.status)"
+                  class="ms-auto h-3 w-3 shrink-0 opacity-0 group-hover:opacity-50"
+                  aria-hidden="true"
+                />
+              </span>
+              <span v-if="blk.height > 34" class="truncate opacity-80">{{
+                blk.view.service?.name
+              }}</span>
+              <span v-if="blk.height > 52" class="truncate opacity-70" data-numeric>{{
+                timeRange(blk.b.startAt, blk.b.endAt)
+              }}</span>
+            </template>
           </button>
 
           <!-- where a dragged booking would land -->
