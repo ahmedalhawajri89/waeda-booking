@@ -24,3 +24,7 @@ Thumbs.db
 
 # portfolio captures (npm run showcase)
 /showcase
+
+# market research (not code)
+/research_notes
+/reports
