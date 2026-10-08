@@ -495,6 +495,59 @@ await go('/book', 'guest-book-gender', 700)
   )
 }
 
+// --- the business's own plan ------------------------------------------------
+await go('/app/settings?tab=plan', 'app-settings-plan', 900)
+{
+  const status = await page.locator('[data-plan-status]').innerText()
+  const meters = await page.locator('[data-meter]').count()
+  console.log(
+    /تجربة الاحترافية/.test(status) && meters === 2
+      ? '✓ the plan tab shows the trial and what is used'
+      : `✗ plan tab (status="${status.slice(0, 40)}", meters=${meters})`,
+  )
+
+  await page.locator('[data-plan="basic"]').getByRole('button', { name: /اختر/ }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'تأكيد' }).click()
+  await page.waitForTimeout(500)
+  console.log(
+    /باقة الأساسية/.test(await page.locator('[data-plan-status]').innerText())
+      ? '✓ choosing a plan switches it (instantly on the demo)'
+      : '✗ upgrade did not apply',
+  )
+
+  // On the free plan, a full team offers the upgrade instead of a form.
+  await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('bookingpro:subscription:v1'))
+    localStorage.setItem(
+      'bookingpro:subscription:v1',
+      JSON.stringify({ ...s, plan: 'free', trialEndsAt: null }),
+    )
+  })
+  await go('/app/settings?tab=resources', 'app-settings-team-limit', 900)
+  await page.getByRole('button', { name: 'إضافة' }).first().click()
+  await page.waitForTimeout(400)
+  const offered = await page.getByText(/باقتك تسمح/).count()
+  const form = await page.getByRole('dialog').count()
+  console.log(
+    offered > 0 && form === 0
+      ? '✓ a full team on the free plan is offered the upgrade'
+      : `✗ staff limit (toast=${offered}, form=${form})`,
+  )
+}
+
+await go('/', 'home-pricing', 800)
+{
+  // Yearly is the default and shows the monthly equivalent; read the monthly prices.
+  await page.locator('#pricing').getByRole('switch').click()
+  await page.waitForTimeout(300)
+  const text = await page.locator('#pricing').innerText()
+  console.log(
+    /99/.test(text) && /249/.test(text) && !/قريباً/.test(text)
+      ? '✓ the pricing page shows the real plans'
+      : '✗ pricing page out of date',
+  )
+}
+
 // --- responsive ---------------------------------------------------------
 for (const [w, h, tag] of [
   [390, 844, 'mobile'],

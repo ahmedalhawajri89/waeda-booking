@@ -11,6 +11,7 @@ import {
   Sparkles,
   UserRound,
   Users,
+  CreditCard,
 } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { businessHours, resources, services } from '@/data/catalog'
@@ -31,8 +32,10 @@ import ErrorState from '@/components/ui/ErrorState.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import SpecialPeriodsPanel from '@/components/settings/SpecialPeriodsPanel.vue'
 import PrayerPanel from '@/components/settings/PrayerPanel.vue'
+import PlanPanel from '@/components/settings/PlanPanel.vue'
+import { useSubscriptionStore } from '@/stores/subscription'
 import GuardPolicyForm from '@/components/guard/GuardPolicyForm.vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 /**
  * The configuration the availability engine reads. This screen used to render
@@ -45,6 +48,25 @@ import { useRoute } from 'vue-router'
 const bookings = useBookingsStore()
 const customers = useCustomersStore()
 const settings = useSettingsStore()
+const sub = useSubscriptionStore()
+const router = useRouter()
+
+/**
+ * Seats are what the plans are priced on. At the limit, adding someone (or
+ * switching someone back on) offers the upgrade instead of a form that the
+ * server would refuse after it was filled in.
+ */
+function withinSeats(action) {
+  const active = resources.filter((r) => r.isActive).length
+  if (sub.canAddStaff(active)) return action()
+  toast(`باقتك تسمح بـ${sub.plan.staff} من الفريق`, {
+    description: 'رقِّ اشتراكك لإضافة المزيد، أو عطّل عضواً لا يعمل حالياً.',
+    action: { label: 'الباقات', onClick: () => router.push('/app/settings?tab=plan') },
+  })
+}
+const addStaff = () => withinSeats(() => (editingResource.value = settings.newResource()))
+const toggleStaff = (r) =>
+  r.isActive ? settings.toggleResource(r.id) : withinSeats(() => settings.toggleResource(r.id))
 const auth = useAuthStore()
 
 const WEEKDAYS = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
@@ -55,6 +77,7 @@ const TABS = [
   { value: 'resources', label: 'الفريق', icon: Users, hint: 'من يقدّم الخدمات' },
   { value: 'hours', label: 'ساعات العمل', icon: Clock, hint: 'متى تستقبل الحجوزات' },
   { value: 'guard', label: 'حارس المواعيد', icon: ShieldCheck, hint: 'التذكير وإعادة الملء' },
+  { value: 'plan', label: 'الاشتراك', icon: CreditCard, hint: 'باقتك واستهلاكك' },
   { value: 'account', label: 'الحساب', icon: UserRound, hint: 'بريدك والبيانات' },
 ]
 // Deep-linkable: the guard screen links straight to its policy.
@@ -480,9 +503,7 @@ async function resetData() {
                 كل شخص (أو غرفة، أو كرسي) له جدول مستقل، ولا يُحجز مرتين في نفس الوقت.
               </p>
             </div>
-            <BaseButton size="sm" :icon="Plus" @click="editingResource = settings.newResource()">
-              إضافة
-            </BaseButton>
+            <BaseButton size="sm" :icon="Plus" @click="addStaff"> إضافة </BaseButton>
           </header>
           <ul class="divide-border divide-y">
             <li v-for="r in resources" :key="r.id" class="flex items-center gap-3 px-4 py-2.5">
@@ -503,7 +524,7 @@ async function resetData() {
                   >{{ r.role || 'بلا وظيفة' }}<template v-if="!r.isActive"> · معطّل</template></span
                 >
               </button>
-              <BaseButton size="sm" variant="ghost" @click="settings.toggleResource(r.id)">
+              <BaseButton size="sm" variant="ghost" @click="toggleStaff(r)">
                 {{ r.isActive ? 'تعطيل' : 'تفعيل' }}
               </BaseButton>
             </li>
@@ -512,6 +533,7 @@ async function resetData() {
 
         <!-- ---------------------------------------------------------- guard -->
         <GuardPolicyForm v-else-if="tab === 'guard'" />
+        <PlanPanel v-else-if="tab === 'plan'" />
 
         <!-- -------------------------------------------------------- account -->
         <section v-else class="surface p-4">

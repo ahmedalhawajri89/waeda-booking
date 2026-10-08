@@ -120,7 +120,8 @@ class AuthController extends Controller
             'business.slug' => ['required', 'string', self::SLUG_RULE, 'unique:organizations,slug'],
             'business.category' => ['nullable', 'string', 'max:64'],
             'business.address' => ['nullable', 'string', 'max:255'],
-            'staff' => ['required', 'array', 'min:1', 'max:20'],
+            // The trial's seats: a new business starts on the top plan.
+            'staff' => ['required', 'array', 'min:1', 'max:10'],
             'staff.*.name' => ['required', 'string', 'min:2', 'max:255'],
             'staff.*.role' => ['nullable', 'string', 'max:120'],
             'staff.*.gender' => ['nullable', 'in:female,male'],

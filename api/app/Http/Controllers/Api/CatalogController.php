@@ -7,6 +7,7 @@ use App\Models\BusinessHour;
 use App\Models\Organization;
 use App\Models\Resource;
 use App\Models\Service;
+use App\Services\Subscription;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -136,6 +137,23 @@ class CatalogController extends Controller
             'prayer.minutes' => ['required_with:prayer', 'integer', 'between:5,90'],
             'prayer.jumuahMinutes' => ['required_with:prayer', 'integer', 'between:5,120'],
         ]);
+
+        // Seats are what plans are priced on: count who would be active after
+        // this save. Switched-off staff keep their history and cost nothing.
+        if (array_key_exists('resources', $data)) {
+            $sent = collect($data['resources']);
+            $active = $sent->where('isActive', true)->count()
+                + Resource::where('org_id', $this->orgId($request))->where('is_active', true)
+                    ->whereNotIn('id', $sent->pluck('id'))->count();
+            $limit = app(Subscription::class)->staffLimit($this->orgId($request));
+            if ($active > $limit) {
+                return response()->json([
+                    'error' => 'staff_limit',
+                    'message' => "باقتك تسمح بـ{$limit} من الفريق. رقِّ اشتراكك لإضافة المزيد.",
+                    'limit' => $limit,
+                ], 422);
+            }
+        }
 
         // Two periods on the same date would leave "which hours?" to chance.
         $periods = collect($data['specialPeriods'] ?? [])->sortBy('startsOn')->values();

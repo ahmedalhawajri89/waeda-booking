@@ -292,7 +292,13 @@ const price = (p) => (Number(p) > 0 ? `${Number(p)} ر.س` : 'مجاناً')
         <Check class="h-8 w-8" stroke-width="3" aria-hidden="true" />
       </span>
       <h1 class="font-display text-fg mb-2 text-2xl font-bold">صفحة حجز {{ biz.name }} جاهزة</h1>
-      <p class="text-fg-muted mb-8">أرسل الرابط لعملائك، وكل حجز يصل إلى لوحة التحكم مباشرة.</p>
+      <p class="text-fg-muted mb-3">أرسل الرابط لعملائك، وكل حجز يصل إلى لوحة التحكم مباشرة.</p>
+      <p
+        class="bg-primary-soft text-primary-fg mx-auto mb-8 inline-block rounded-full px-3 py-1 text-xs font-semibold"
+        data-trial
+      >
+        بدأت تجربة الباقة الاحترافية لمدة 14 يوماً، بلا بطاقة
+      </p>
 
       <div
         class="border-border bg-surface mb-4 flex items-center gap-2 rounded-[var(--radius-lg)] border p-2 ps-4"

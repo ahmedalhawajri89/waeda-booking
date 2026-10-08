@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { Check, Minus } from 'lucide-vue-next'
 import SectionHeading from './SectionHeading.vue'
+import { MESSAGE_PACK, PLANS as PLAN_DATA, TRIAL_DAYS, YEARLY_MONTHS } from '@/data/plans'
 
 /**
  * A comparison table, not three cards.
@@ -17,41 +18,47 @@ import SectionHeading from './SectionHeading.vue'
  */
 const yearly = ref(true)
 
-const PLANS = [
-  { name: 'البداية', monthly: 0, tagline: 'لنشاط فردي يبدأ الآن.', cta: 'ابدأ مجاناً' },
-  {
-    name: 'الاحترافي',
-    monthly: 79,
-    tagline: 'للنشاط الذي يديره فريق.',
-    cta: 'ابدأ التجربة',
-    featured: true,
-  },
-  { name: 'المنشآت', monthly: 199, tagline: 'للمنشآت الأكبر وفرق العمل.', cta: 'ابدأ التجربة' },
-]
+// The same plans the console sells — one file, so this page cannot drift.
+const PLANS = PLAN_DATA.map((p) => ({
+  name: p.name,
+  monthly: p.priceMinor / 100,
+  tagline: p.tagline,
+  cta: p.priceMinor ? `جرّبها ${TRIAL_DAYS} يوماً` : 'ابدأ مجاناً',
+  featured: p.key === 'pro',
+}))
 
-/** One row per capability, one cell per plan — the whole point of the layout. */
+/**
+ * One row per capability, one cell per plan — the whole point of the layout.
+ * A cell is a tick, a dash, or the number that differs between plans.
+ */
 const FEATURES = [
-  { label: 'حجوزات غير محدودة', included: [true, true, true] },
-  { label: 'صفحة حجز للعملاء', included: [true, true, true] },
-  { label: 'منع التعارضات', included: [true, true, true] },
-  { label: 'موارد وموظفون بلا حد', included: [false, true, true] },
-  { label: 'تتبّع المدفوعات والعربون', included: [false, true, true] },
-  { label: 'ملفات العملاء وسجلهم', included: [false, true, true] },
-  { label: 'سجل تدقيق كامل', included: [false, true, true] },
-  { label: 'فروع متعددة (قريباً)', included: [false, false, true] },
-  { label: 'ربط مع أنظمتك عبر API', included: [false, false, true] },
+  { label: 'حجوزات بلا حد، وصفحة حجز بلا حساب للعميل', included: [true, true, true] },
+  { label: 'من الفريق', included: PLAN_DATA.map((p) => `${p.staff}`) },
+  { label: 'رسائل واتساب شهرياً', included: PLAN_DATA.map((p) => p.messages.toLocaleString('en')) },
+  { label: 'حارس المواعيد: تذكير وتأكيد', included: [true, true, true] },
+  { label: 'صندوق محادثات العملاء', included: [true, true, true] },
+  { label: 'إعادة ملء المواعيد الملغاة', included: PLAN_DATA.map((p) => p.features.refill) },
+  { label: 'طلب عربون من المعرّضين للغياب', included: PLAN_DATA.map((p) => p.features.deposits) },
+  {
+    label: `باقة ${MESSAGE_PACK.messages} رسالة إضافية بـ${MESSAGE_PACK.priceMinor / 100} ر.س`,
+    included: [true, true, true],
+  },
 ]
 
+// Yearly is ten months for twelve; shown as what it comes to per month.
 const price = computed(() => (p) => {
   if (p.monthly === 0) return 'مجاناً'
-  return `${yearly.value ? Math.round(p.monthly * 0.8) : p.monthly} ر.س`
+  return `${yearly.value ? Math.round((p.monthly * YEARLY_MONTHS) / 12) : p.monthly} ر.س`
 })
 </script>
 
 <template>
   <section id="pricing" class="section bg-canvas">
     <div class="section-inner">
-      <SectionHeading title="ابدأ مجاناً، وادفع حين يكبر نشاطك" lede="بلا عقود، بلا رسوم إعداد." />
+      <SectionHeading
+        title="ابدأ مجاناً، وادفع حين يكبر نشاطك"
+        :lede="`كل منشأة جديدة تبدأ بتجربة الاحترافية ${TRIAL_DAYS} يوماً بلا بطاقة. بلا عقود ولا رسوم إعداد.`"
+      />
 
       <!-- billing toggle -->
       <div v-reveal class="mb-10 flex items-center justify-center gap-3">
@@ -77,7 +84,7 @@ const price = computed(() => (p) => {
           سنوي
         </span>
         <span class="bg-success-50 text-success-700 rounded-full px-2 py-0.5 text-[11px] font-bold">
-          وفّر 20%
+          شهران مجاناً
         </span>
       </div>
 
@@ -110,8 +117,14 @@ const price = computed(() => (p) => {
                   <p class="type-h3 text-fg">{{ p.name }}</p>
                   <p class="text-fg-subtle mt-0.5 text-[12px]">{{ p.tagline }}</p>
                   <p class="mt-3 flex items-baseline justify-center gap-1.5">
-                    <span class="text-fg text-2xl font-extrabold" data-numeric>{{ price(p) }}</span>
+                    <span class="text-fg text-2xl font-extrabold whitespace-nowrap" data-numeric>{{
+                      price(p)
+                    }}</span>
                     <span v-if="p.monthly > 0" class="text-fg-subtle text-[12px]">/ شهرياً</span>
+                  </p>
+
+                  <p v-if="yearly && p.monthly > 0" class="text-fg-subtle mt-0.5 text-[11px]">
+                    يُدفع سنوياً
                   </p>
                   <RouterLink
                     to="/register"
@@ -134,7 +147,17 @@ const price = computed(() => (p) => {
                 {{ f.label }}
               </th>
               <td v-for="(inc, i) in f.included" :key="i" class="px-4 py-3 text-center">
-                <Check v-if="inc" class="text-success-700 mx-auto h-4.5 w-4.5" aria-hidden="true" />
+                <span
+                  v-if="typeof inc === 'string'"
+                  class="text-fg text-sm font-bold"
+                  data-numeric
+                  >{{ inc }}</span
+                >
+                <Check
+                  v-else-if="inc"
+                  class="text-success-700 mx-auto h-4.5 w-4.5"
+                  aria-hidden="true"
+                />
                 <Minus v-else class="text-border-strong mx-auto h-4.5 w-4.5" aria-hidden="true" />
                 <span class="sr-only">
                   {{ PLANS[i].name }} — {{ inc ? 'متضمّن' : 'غير متضمّن' }}
@@ -164,8 +187,14 @@ const price = computed(() => (p) => {
           <h3 class="type-h3 text-fg">{{ p.name }}</h3>
           <p class="text-fg-subtle mt-0.5 text-[13px]">{{ p.tagline }}</p>
           <p class="mt-4 flex items-baseline gap-1.5">
-            <span class="text-fg text-3xl font-extrabold" data-numeric>{{ price(p) }}</span>
+            <span class="text-fg text-3xl font-extrabold whitespace-nowrap" data-numeric>{{
+              price(p)
+            }}</span>
             <span v-if="p.monthly > 0" class="text-fg-subtle text-[13px]">/ شهرياً</span>
+          </p>
+
+          <p v-if="yearly && p.monthly > 0" class="text-fg-subtle mt-0.5 text-[11px]">
+            يُدفع سنوياً
           </p>
           <RouterLink
             to="/register"
@@ -185,8 +214,14 @@ const price = computed(() => (p) => {
               class="flex items-start gap-2 text-[13px]"
               :class="f.included[pi] ? 'text-fg-muted' : 'text-fg-subtle'"
             >
+              <span
+                v-if="typeof f.included[pi] === 'string'"
+                class="text-fg min-w-4 shrink-0 font-bold"
+                data-numeric
+                >{{ f.included[pi] }}</span
+              >
               <Check
-                v-if="f.included[pi]"
+                v-else-if="f.included[pi]"
                 class="text-success-700 mt-0.5 h-4 w-4 shrink-0"
                 aria-hidden="true"
               />

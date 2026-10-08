@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\GuardController;
 use App\Http\Controllers\Api\GuardPolicyController;
 use App\Http\Controllers\Api\PublicBookingController;
+use App\Http\Controllers\Api\SubscriptionController;
 use App\Http\Middleware\EnsureOperator;
 use App\Http\Middleware\ResolveOptionalUser;
 use Illuminate\Support\Facades\Route;
@@ -90,6 +91,9 @@ Route::middleware(['auth:sanctum', EnsureOperator::class])->group(function () {
     Route::post('bookings', [BookingController::class, 'store']);
     Route::patch('bookings/{id}', [BookingController::class, 'update']);
     Route::post('bookings/{id}/acknowledge', [BookingController::class, 'acknowledge']);
+    // The business's own plan and usage, and asking for more.
+    Route::get('subscription', [SubscriptionController::class, 'show']);
+    Route::post('subscription/requests', [SubscriptionController::class, 'request'])->middleware('throttle:10,1');
     Route::put('customers', [CustomerController::class, 'bulkUpdate']);
     Route::put('catalog', [CatalogController::class, 'update']);
 

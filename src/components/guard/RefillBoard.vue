@@ -19,6 +19,7 @@ import { toast } from 'vue-sonner'
 import { useGuardStore } from '@/stores/guard'
 import { useBookingsStore } from '@/stores/bookings'
 import { useCustomersStore } from '@/stores/customers'
+import { useSubscriptionStore } from '@/stores/subscription'
 import { bookableResources, resources, serviceById } from '@/data/catalog'
 import { business, initialOf } from '@/data/business'
 import { isDemoBackend } from '@/data/repository'
@@ -44,6 +45,7 @@ const guard = useGuardStore()
 const store = useBookingsStore()
 const customers = useCustomersStore()
 const avail = useGuestAvailability()
+const sub = useSubscriptionStore()
 
 onMounted(async () => {
   await Promise.all([guard.loadWaitlist(), customers.load()])
@@ -216,6 +218,22 @@ function whatsappFor(e) {
 
 <template>
   <div class="space-y-5">
+    <!-- the free plan shows what refilling does, and that it is off -->
+    <p
+      v-if="sub.loaded && !sub.allows('refill')"
+      class="border-border bg-surface flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-lg)] border px-4 py-3 text-sm"
+      data-refill-locked
+    >
+      <span class="text-fg-muted">
+        إعادة الملء متوقفة في الباقة المجانية: الموعد الملغى يبقى فارغاً ولا يُعرض على قائمة
+        الانتظار.
+      </span>
+      <RouterLink
+        to="/app/settings?tab=plan"
+        class="text-fg shrink-0 font-semibold underline underline-offset-4"
+        >فعّلها من الأساسية</RouterLink
+      >
+    </p>
     <!-- what it is for, and what it has been worth -->
     <section class="surface overflow-hidden" aria-labelledby="refill-what">
       <div class="grid gap-0 lg:grid-cols-[minmax(0,1fr)_26rem]">

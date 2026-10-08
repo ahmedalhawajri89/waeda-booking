@@ -5,6 +5,7 @@ import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import { useGuardStore } from '@/stores/guard'
 import { useBookingsStore } from '@/stores/bookings'
+import { useSubscriptionStore } from '@/stores/subscription'
 import { DEFAULT_POLICY, TIER, planFor, withDefaults } from '@/lib/guard'
 import { tierOf } from '@/lib/risk'
 
@@ -15,6 +16,9 @@ import { tierOf } from '@/lib/risk'
  */
 const guard = useGuardStore()
 const bookings = useBookingsStore()
+/** Deposit requests are a top-plan feature; shown, but locked, below it. */
+const sub = useSubscriptionStore()
+onMounted(() => sub.load())
 onMounted(() => {
   guard.load()
   bookings.load()
@@ -136,12 +140,23 @@ async function save() {
         />
       </div>
 
-      <label class="flex items-start gap-3">
-        <input v-model="draft.depositForHigh" type="checkbox" class="accent-primary mt-1 h-4 w-4" />
+      <label class="flex items-start gap-3" :class="!sub.allows('deposits') && 'opacity-60'">
+        <input
+          v-model="draft.depositForHigh"
+          type="checkbox"
+          class="accent-primary mt-1 h-4 w-4"
+          :disabled="!sub.allows('deposits')"
+        />
         <span>
-          <span class="text-fg block text-sm font-semibold"
-            >طلب عربون من الحجوزات مرتفعة الخطر</span
-          >
+          <span class="text-fg flex items-center gap-2 text-sm font-semibold"
+            >طلب عربون من الحجوزات مرتفعة الخطر
+            <RouterLink
+              v-if="!sub.allows('deposits')"
+              to="/app/settings?tab=plan"
+              class="bg-surface-sunken text-fg-muted rounded-full px-2 py-0.5 text-[11px]"
+              >متاح في الاحترافية</RouterLink
+            >
+          </span>
           <span class="text-fg-subtle block text-xs">الدفع المسبق أقوى ما يخفض الغياب.</span>
         </span>
       </label>

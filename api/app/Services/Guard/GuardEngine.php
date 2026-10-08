@@ -16,6 +16,8 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Throwable;
+use App\Services\Subscription;
+use Illuminate\Http\Exceptions\HttpResponseException;
 
 /**
  * The appointment guard, server side: planActions() and the backend half
@@ -40,6 +42,7 @@ class GuardEngine
         private ReplyUnderstanding $understanding,
         private SlotFinder $slots,
         private Backfill $backfill,
+        private Subscription $subscription,
     ) {
     }
 
@@ -94,7 +97,7 @@ class GuardEngine
                 $count += $this->send($b, 'reminder', $templates, $now);
             }
 
-            if ($tier === 'high' && $policy->depositForHigh && ! $confirmed && $b->payment_status === 'unpaid'
+            if ($tier === 'high' && $policy->depositForHigh && $this->subscription->allows($org, 'deposits') && ! $confirmed && $b->payment_status === 'unpaid'
                 && ! $has($b, 'deposit_request') && $hoursLeft <= $policy->remindHoursBefore) {
                 $count += $this->send($b, 'deposit_request', $templates, $now);
             }
@@ -102,7 +105,9 @@ class GuardEngine
 
         // A slot freed by a cancellation or a release is offered on — so a
         // no-show caught early becomes a booking instead of an empty hour.
-        foreach ($this->backfill->freedSlots($bookings, $now) as $slot) {
+        // Refilling is a paid feature: on the free plan a freed slot just stays free.
+        $slots = $this->subscription->allows($org, 'refill') ? $this->backfill->freedSlots($bookings, $now) : [];
+        foreach ($slots as $slot) {
             foreach ($this->backfill->candidates($slot, $bookings, $tz, $now) as $c) {
                 $to = Customer::find($c['customerId']);
                 $count += $this->send($slot, 'backfill_offer', $templates, $now,
@@ -279,6 +284,14 @@ class GuardEngine
      */
     public function staffReply(Booking $booking, string $body, string $author): GuardMessage
     {
+        // A person is waiting on this one, so say why it did not go.
+        if (! $this->subscription->canSend($booking->org_id)) {
+            throw new HttpResponseException(response()->json([
+                'error' => 'message_quota',
+                'message' => 'انتهت رسائل هذا الشهر في باقتك. أضف باقة رسائل أو رقِّ اشتراكك.',
+            ], 422));
+        }
+
         $message = GuardMessage::create([
             'id' => (string) Str::uuid(),
             'org_id' => $booking->org_id,
@@ -335,6 +348,11 @@ class GuardEngine
         ?Customer $to = null,
         ?string $onceKey = null,
     ): int {
+        // Out of messages: the guard goes quiet, bookings carry on.
+        if (! $this->subscription->canSend($b->org_id)) {
+            return 0;
+        }
+
         $id = (string) Str::uuid();
         $claimed = DB::table('guard_messages')->insertOrIgnore([
             'id' => $id,

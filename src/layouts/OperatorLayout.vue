@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   Sun,
   Users,
+  Sparkles,
 } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import AppLogo from '@/components/ui/AppLogo.vue'
@@ -39,6 +40,7 @@ import { useCustomersStore } from '@/stores/customers'
 import { useSettingsStore } from '@/stores/settings'
 import { useAuthStore } from '@/stores/auth'
 import { useGuardStore } from '@/stores/guard'
+import { useSubscriptionStore } from '@/stores/subscription'
 import { useTheme } from '@/composables/useTheme'
 import { business } from '@/data/business'
 import { fullDate } from '@/lib/format'
@@ -62,6 +64,7 @@ const customers = useCustomersStore()
 const settings = useSettingsStore()
 const auth = useAuthStore()
 const guard = useGuardStore()
+const sub = useSubscriptionStore()
 const theme = useTheme()
 let guardTimer
 
@@ -254,6 +257,7 @@ onMounted(() => {
   guardTimer = setInterval(() => guard.run(), 60_000)
   void bookings.load()
   void customers.load()
+  void sub.load()
   document.addEventListener('keydown', onKeydown)
 })
 onBeforeUnmount(() => {
@@ -439,6 +443,23 @@ const wide = computed(() => !folded.value)
         </div>
       </nav>
 
+      <!-- the plan: quiet, one line, and the way to the subscription page -->
+      <RouterLink
+        v-if="wide && sub.loaded"
+        to="/app/settings?tab=plan"
+        class="text-fg-subtle hover:text-fg mx-3 mb-2 hidden items-center justify-between gap-2 rounded-[var(--radius-md)] px-2.5 py-1.5 text-[11px] font-semibold lg:flex"
+        data-plan-badge
+      >
+        <span class="flex items-center gap-1.5">
+          <Sparkles class="h-3.5 w-3.5" aria-hidden="true" />
+          {{ sub.inTrial ? `تجربة ${sub.plan.name}` : `باقة ${sub.plan.name}` }}
+        </span>
+        <span v-if="sub.inTrial" class="text-primary-fg" data-numeric
+          >{{ sub.daysLeft }} {{ sub.daysLeft > 2 && sub.daysLeft < 11 ? 'أيام' : 'يوماً' }}</span
+        >
+        <span v-else data-numeric>{{ sub.usage.messages }}/{{ sub.messageAllowance }}</span>
+      </RouterLink>
+
       <!-- the link customers book on: shared now and then, so it lives low -->
       <div v-if="wide" class="hidden px-3 pb-2 lg:block">
         <div class="border-border rounded-[var(--radius-md)] border p-2.5">
@@ -539,6 +560,26 @@ const wide = computed(() => !folded.value)
 
         <NotificationsMenu @open-booking="openBooking" />
       </header>
+
+      <!-- the one plan fact worth interrupting for, if there is one -->
+      <div
+        v-if="sub.alert"
+        class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2 text-sm lg:px-6"
+        :class="
+          sub.alert.tone === 'danger'
+            ? 'bg-danger-50 text-danger-700 border-danger-100'
+            : 'bg-warning-50 text-warning-700 border-warning-100'
+        "
+        role="status"
+        data-plan-alert
+      >
+        <span class="min-w-0 flex-1">{{ sub.alert.text }}</span>
+        <RouterLink
+          to="/app/settings?tab=plan"
+          class="shrink-0 font-semibold underline underline-offset-4"
+          >{{ sub.alert.action }}</RouterLink
+        >
+      </div>
 
       <main id="main" class="min-w-0 flex-1">
         <RouterView v-slot="{ Component }">

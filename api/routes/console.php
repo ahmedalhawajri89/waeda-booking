@@ -22,3 +22,21 @@ Artisan::command('guard:tick', function (App\Services\Guard\GuardEngine $guard) 
 })->purpose('Run the appointment guard for every organization');
 
 Illuminate\Support\Facades\Schedule::command('guard:tick')->everyFiveMinutes()->withoutOverlapping();
+
+/*
+| Turning a plan on, until payments are connected: what a successful payment
+| will do. `--messages=500` adds a message pack for the current month.
+|   php artisan waeda:activate alrayhan basic --cycle=yearly
+*/
+Artisan::command('waeda:activate {slug} {plan?} {--cycle=monthly} {--messages=0}', function (App\Services\Subscription $subscription) {
+    $org = App\Models\Organization::where('slug', $this->argument('slug'))->value('id');
+    if (! $org) {
+        return $this->error('No business with that link.');
+    }
+    $plan = $this->argument('plan');
+    if ($plan && ! array_key_exists($plan, config('plans.plans'))) {
+        return $this->error('Unknown plan. Use: '.implode(', ', array_keys(config('plans.plans'))));
+    }
+    $subscription->activate($org, $plan, $this->option('cycle'), (int) $this->option('messages'));
+    $this->info('Activated.');
+})->purpose('Activate a plan or a message pack for a business');

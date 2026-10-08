@@ -65,6 +65,16 @@ export class ApiRepository {
     )
   }
 
+  /** The plan, its usage, and any request waiting to be activated. */
+  async loadSubscription() {
+    return request('/subscription')
+  }
+
+  /** Ask for a plan or a message pack; someone at Waeda activates it. */
+  async requestPlan(body) {
+    return request('/subscription/requests', { method: 'POST', body })
+  }
+
   /** The business has seen a booking that arrived on its own. */
   async acknowledgeBooking(id) {
     return request(`/bookings/${id}/acknowledge`, { method: 'POST' })

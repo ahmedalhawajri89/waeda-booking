@@ -1,6 +1,7 @@
 import { buildSeedBookings, customers as seedCustomers } from './seed'
 import { DEFAULT_HOURS, DEFAULT_RESOURCES, DEFAULT_SERVICES } from './catalog'
 import { DEFAULT_BUSINESS } from './business'
+import { effectivePlan, MESSAGE_PACK, TRIAL_DAYS } from './plans'
 import { ConflictError } from './errors'
 import { buildRiskModel } from '@/lib/risk'
 import { withDefaults } from '@/lib/guard'
@@ -53,6 +54,7 @@ const KEY_MESSAGES = 'bookingpro:messages:v1'
 const KEY_WAITLIST = 'bookingpro:waitlist:v1'
 /** Set once a visitor opens their own business: the demo seed stops arriving. */
 const KEY_OWNED = 'bookingpro:owned:v1'
+const KEY_SUBSCRIPTION = 'bookingpro:subscription:v1'
 
 /** Simulated latency, so loading states are real rather than theoretical. */
 const LATENCY_MS = 220
@@ -354,13 +356,14 @@ class LocalRepository {
   async guardTick() {
     this.#ensureFresh()
     const input = this.#guardInputs()
-    const actions = planActions({
+    const planned = planActions({
       waitlist: input.waitlist,
       bookings: input.bookings,
       messages: input.messages,
       policy: withDefaults(read(KEY_GUARD)),
       model: buildRiskModel(input.bookings),
     })
+    const actions = this.#withinPlan(planned)
     if (actions.length === 0) return { messages: input.messages, bookings: input.bookings }
     const result = applyActions({ actions, ...input })
     // Releasing only ever frees a slot, so no overlap check is needed here.
@@ -369,8 +372,81 @@ class LocalRepository {
     return { messages: result.messages, bookings: result.bookings }
   }
 
+  /* ------------------------------------------------------- subscription */
+
+  /** The plan as stored: the demo clinic is part-way through its trial. */
+  #subscription() {
+    return (
+      read(KEY_SUBSCRIPTION) ?? {
+        plan: 'free',
+        cycle: 'monthly',
+        trialEndsAt: new Date(Date.now() + 9 * 86_400_000).toISOString(),
+        extraMessages: 0,
+        extraMonth: null,
+        pending: null,
+      }
+    )
+  }
+
+  /** What has been used this month: outbound messages, active staff. */
+  #usage() {
+    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
+    const month = monthStart.slice(0, 7)
+    const sub = this.#subscription()
+    return {
+      messages: (read(KEY_MESSAGES) ?? []).filter(
+        (m) => m.direction === 'out' && m.at >= monthStart,
+      ).length,
+      extraMessages: sub.extraMonth === month ? sub.extraMessages : 0,
+      staff: (read(KEY_CATALOG)?.resources ?? DEFAULT_RESOURCES).filter((r) => r.isActive).length,
+    }
+  }
+
+  /**
+   * The guard's plan, trimmed to what the plan pays for: no refill or
+   * deposit requests where the plan has none, and no more messages than are
+   * left this month. Releasing a slot is never held back.
+   */
+  #withinPlan(actions) {
+    const { plan } = effectivePlan(this.#subscription())
+    const usage = this.#usage()
+    let left = plan.messages + usage.extraMessages - usage.messages
+    return actions.filter((a) => {
+      if (a.kind === 'release') return true
+      if (a.kind === 'backfill' && !plan.features.refill) return false
+      if (a.template === 'deposit_request' && !plan.features.deposits) return false
+      if (left <= 0) return false
+      left -= 1
+      return true
+    })
+  }
+
+  async loadSubscription() {
+    return delay({ ...this.#subscription(), usage: this.#usage() })
+  }
+
+  /** On the demo there is nobody to wait for: a request is activated at once. */
+  async requestPlan({ plan, cycle = 'monthly', extraPack = false }) {
+    const sub = this.#subscription()
+    const month = new Date().toISOString().slice(0, 7)
+    const next = { ...sub, pending: null }
+    if (plan) Object.assign(next, { plan, cycle, trialEndsAt: null })
+    if (extraPack) {
+      next.extraMessages =
+        (sub.extraMonth === month ? sub.extraMessages : 0) + MESSAGE_PACK.messages
+      next.extraMonth = month
+    }
+    write(KEY_SUBSCRIPTION, next)
+    return delay({ ...next, usage: this.#usage(), activated: true })
+  }
+
   /** The team writing to a customer; answering closes the hand-off. */
   async sendStaffMessage(bookingId, body, author) {
+    const sub = this.#subscription()
+    const usage = this.#usage()
+    if (usage.messages >= effectivePlan(sub).plan.messages + usage.extraMessages) {
+      throw Object.assign(new Error('message_quota'), { status: 422, code: 'message_quota' })
+    }
     const messages = (read(KEY_MESSAGES) ?? []).map((m) =>
       m.bookingId === bookingId && m.needsStaff ? { ...m, needsStaff: false } : m,
     )
@@ -470,11 +546,21 @@ class LocalRepository {
     write(KEY_MESSAGES, [])
     write(KEY_WAITLIST, [])
     write(KEY_OWNED, true)
+    // A new business starts on a trial of the top plan, as on the API.
+    write(KEY_SUBSCRIPTION, {
+      plan: 'free',
+      cycle: 'monthly',
+      trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 86_400_000).toISOString(),
+      extraMessages: 0,
+      extraMonth: null,
+      pending: null,
+    })
     return delay(null)
   }
 
   async reset() {
     ;[
+      KEY_SUBSCRIPTION,
       KEY_OWNED,
       KEY_BOOKINGS,
       KEY_CUSTOMERS,
@@ -547,5 +633,7 @@ export const repository = {
   removeFromWaitlist: (id) => active.removeFromWaitlist(id),
   replyToOffer: (offerId, text) => active.replyToOffer(offerId, text),
   saveGuardPolicy: (p) => active.saveGuardPolicy(p),
+  loadSubscription: () => active.loadSubscription(),
+  requestPlan: (r) => active.requestPlan(r),
   reset: () => active.reset(),
 }
