@@ -2,7 +2,14 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { isSameDay, isWithinInterval, startOfDay, addDays, format } from 'date-fns'
-import { ArrowDown, ArrowUp, CalendarPlus, Download, SearchX } from 'lucide-vue-next'
+import {
+  ArrowDown,
+  ArrowUp,
+  CalendarPlus,
+  Download,
+  SearchX,
+  SlidersHorizontal,
+} from 'lucide-vue-next'
 import { useBookingsStore } from '@/stores/bookings'
 import { useCustomersStore } from '@/stores/customers'
 import { resources, services, serviceById } from '@/data/catalog'
@@ -32,6 +39,14 @@ const quick = ref('upcoming')
 const status = ref('all')
 const serviceId = ref('all')
 const resourceId = ref('all')
+/**
+ * On a phone the selects and the sort sit behind one button: shown, they took
+ * half the screen before the first booking. The button says how many are on.
+ */
+const showFilters = ref(false)
+const activeFilters = computed(
+  () => [status.value, serviceId.value, resourceId.value].filter((v) => v !== 'all').length,
+)
 const sortKey = ref('time')
 const sortDesc = ref(false)
 const page = ref(1)
@@ -253,13 +268,17 @@ function exportCsv() {
         class="max-w-md"
         placeholder="ابحث بالاسم أو الجوال أو رقم الحجز"
       />
-      <div class="flex flex-wrap gap-1.5" role="group" aria-label="مرشّحات سريعة">
+      <div
+        class="-mx-4 flex gap-1.5 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:overflow-visible md:px-0"
+        role="group"
+        aria-label="مرشّحات سريعة"
+      >
         <button
           v-for="f in QUICK"
           :key="f.value"
           type="button"
           :aria-pressed="quick === f.value"
-          class="rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
+          class="shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
           :class="
             quick === f.value
               ? 'border-fg bg-fg text-fg-inverse'
@@ -271,7 +290,28 @@ function exportCsv() {
         </button>
       </div>
 
-      <div class="flex flex-wrap items-end gap-2">
+      <button
+        type="button"
+        class="border-border text-fg-muted hover:text-fg inline-flex h-10 items-center gap-2 rounded-[var(--radius-md)] border px-3 text-sm font-semibold md:hidden"
+        :aria-expanded="showFilters"
+        aria-controls="booking-filters"
+        @click="showFilters = !showFilters"
+      >
+        <SlidersHorizontal class="h-4 w-4" aria-hidden="true" />
+        تصفية وترتيب
+        <span
+          v-if="activeFilters"
+          class="bg-fg text-fg-inverse grid h-5 min-w-5 place-items-center rounded-full px-1 text-xs"
+          data-numeric
+          >{{ activeFilters }}</span
+        >
+      </button>
+
+      <div
+        id="booking-filters"
+        class="flex-wrap items-end gap-2 md:flex"
+        :class="showFilters ? 'flex' : 'hidden'"
+      >
         <BaseSelect
           v-model="status"
           label="الحالة"

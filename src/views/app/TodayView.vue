@@ -18,7 +18,7 @@ import { business } from '@/data/business'
 import { useBookingMove } from '@/composables/useBookingMove'
 import { ATTENTION } from '@/lib/status'
 import { clone } from '@/lib/clone'
-import { money, relativeDayTime, time } from '@/lib/format'
+import { money, relativeDay, relativeDayTime, time } from '@/lib/format'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import SkeletonBlock from '@/components/ui/SkeletonBlock.vue'
@@ -44,6 +44,17 @@ const live = computed(() =>
 )
 const attention = computed(() => store.attention)
 const next = computed(() => store.upcoming.slice(0, 4))
+/**
+ * The next few, with the day said where it changes: late in the afternoon the
+ * list runs into tomorrow, and "9:30" under "4:30" read as a time already past.
+ */
+const nextRows = computed(() =>
+  next.value.map((b, i) => {
+    const day = relativeDay(b.startAt)
+    const prev = i ? relativeDay(next.value[i - 1].startAt) : 'اليوم'
+    return { b, day: day !== prev ? day : null }
+  }),
+)
 const occupancy = computed(() => store.occupancyToday)
 
 const KPIS = computed(() => [
@@ -305,7 +316,13 @@ const shareUrl = computed(
               لا مواعيد قادمة.
             </p>
             <ul v-else class="divide-border divide-y">
-              <li v-for="b in next" :key="b.id">
+              <li v-for="{ b, day } in nextRows" :key="b.id">
+                <p
+                  v-if="day"
+                  class="bg-surface-sunken text-fg-muted px-4 py-1.5 text-xs font-semibold"
+                >
+                  {{ day }}
+                </p>
                 <button
                   type="button"
                   class="hover:bg-surface-hover flex w-full items-center gap-3 px-4 py-3 text-start transition-colors"
