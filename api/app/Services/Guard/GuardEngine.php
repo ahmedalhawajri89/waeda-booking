@@ -82,10 +82,9 @@ class GuardEngine
             $asked = $has($b, 'confirm_request');
 
             if ($policy->autoRelease && $asked && ! $confirmed && $hoursLeft <= $policy->releaseHoursBefore) {
-                $this->writer->update($b, ['status' => 'cancelled'], null, [
-                    'type' => 'released', 'summary' => 'حُرّر الموعد لعدم تأكيد الحضور',
-                ]);
-                $count += $this->send($b, 'release_notice', $templates, $now);
+                if ($this->releaseIfStillSilent($b)) {
+                    $count += $this->send($b, 'release_notice', $templates, $now);
+                }
 
                 continue;
             }
@@ -122,6 +121,33 @@ class GuardEngine
         }
 
         return $count;
+    }
+
+    /**
+     * Releases a booking for silence — after checking again, under a lock on
+     * its row, that it is still open and still unconfirmed. The run read every
+     * booking before it started sending, and a "yes" or a staff change can
+     * land while it sends; releasing on that first read would cancel a booking
+     * the customer has just confirmed.
+     */
+    private function releaseIfStillSilent(Booking $b): bool
+    {
+        return DB::transaction(function () use ($b) {
+            $fresh = Booking::with('events')->lockForUpdate()->find($b->id);
+            if (! $fresh || ! in_array($fresh->status, Booking::BLOCKING, true)) {
+                return false;
+            }
+            $confirmed = $fresh->events->contains('type', 'customer_confirmed')
+                || GuardMessage::where('booking_id', $b->id)->where('direction', 'in')->where('intent', 'confirm')->exists();
+            if ($confirmed) {
+                return false;
+            }
+            $this->writer->update($fresh, ['status' => 'cancelled'], null, [
+                'type' => 'released', 'summary' => 'حُرّر الموعد لعدم تأكيد الحضور',
+            ]);
+
+            return true;
+        });
     }
 
     /**

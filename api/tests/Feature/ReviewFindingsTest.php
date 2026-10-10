@@ -151,6 +151,57 @@ class ReviewFindingsTest extends TestCase
         $this->assertSame('confirmed', $booking->fresh()->status, 'a booking the customer actively moved was released');
     }
 
+    /* ------------- G4: a confirmation during the run is released anyway */
+
+    public function test_G4_a_booking_confirmed_while_the_tick_runs_is_not_released(): void
+    {
+        $this->policy(['mediumAt' => 0.01, 'highAt' => 0.9, 'autoRelease' => true, 'releaseHoursBefore' => 2]);
+        $room2 = Resource::create(['id' => (string) Str::uuid(), 'org_id' => $this->org->id, 'name' => 'Room 2']);
+        $this->service->resources()->attach($room2->id);
+        $first = $this->book('2030-03-05 13:00');
+        $second = app(BookingWriter::class)->create([
+            'org_id' => $this->org->id, 'customer_id' => $this->customer->id,
+            'service_id' => $this->service->id, 'resource_id' => $room2->id,
+            'start_at' => Carbon::parse('2030-03-05 13:00', 'Asia/Riyadh'), 'status' => 'confirmed',
+        ]);
+        // Both asked to confirm, half an hour before the window opens on each.
+        $this->guard->tick($this->org->id, Carbon::parse('2030-03-05 10:00', 'Asia/Riyadh'));
+        $this->assertSame(2, GuardMessage::where('template', 'confirm_request')->count());
+
+        // While the run is sending its first release notice, the other
+        // customer's "yes" lands — the run read both bookings before that.
+        $writer = app(BookingWriter::class);
+        $pair = [$first->id => $second, $second->id => $first];
+        $this->app->instance(\App\Channels\MessageChannel::class, new class($writer, $pair) implements \App\Channels\MessageChannel {
+            private bool $done = false;
+
+            public function __construct(private BookingWriter $writer, private array $pair)
+            {
+            }
+
+            public function name(): string
+            {
+                return 'log';
+            }
+
+            public function send(string $phone, string $body): void
+            {
+                if ($this->done) {
+                    return;
+                }
+                $this->done = true;
+                $released = \App\Models\Booking::where('status', 'cancelled')->value('id');
+                $this->writer->record($this->pair[$released]->fresh(), 'customer_confirmed', 'أكّد العميل حضوره برسالة');
+            }
+        });
+        $this->app->forgetInstance(GuardEngine::class);
+
+        app(GuardEngine::class)->tick($this->org->id, Carbon::parse('2030-03-05 11:45', 'Asia/Riyadh'));
+
+        $this->assertSame(1, Booking::where('status', 'cancelled')->count(), 'the booking confirmed mid-run was released too');
+        $this->assertSame(1, GuardMessage::where('template', 'release_notice')->count());
+    }
+
     /* ------------------------- G5: one organization stops the scheduler */
 
     public function test_G5_one_organizations_error_does_not_stop_the_rest(): void
