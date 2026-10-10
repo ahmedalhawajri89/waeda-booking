@@ -94,12 +94,24 @@ export function applyActions({
   return { bookings: bookings.map((b) => byId.get(b.id)), messages: [...messages, ...added], added }
 }
 
-/** The latest offer of times still open for this booking, if any. */
-export function openOffer(messages, bookingId) {
+/** How long an offer of times can still be answered with a number. */
+const OFFER_OPEN_MS = 24 * 3600 * 1000
+
+/**
+ * The latest offer of times for this booking, while it can still be answered:
+ * not used, recent, made against the booking's current time, and with none of
+ * its times already past. GuardEngine::openOffer, line for line.
+ */
+export function openOffer(messages, booking, now = Date.now()) {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i]
-    if (m.bookingId !== bookingId || m.direction !== 'out') continue
-    if (m.template === 'reschedule_offer') return m.payload?.used ? null : m
+    if (m.bookingId !== booking.id || m.direction !== 'out') continue
+    if (m.template !== 'reschedule_offer') continue
+    const { used, from, options = [] } = m.payload ?? {}
+    if (used || new Date(m.at).getTime() < now - OFFER_OPEN_MS) return null
+    if (from && new Date(from).getTime() !== new Date(booking.startAt).getTime()) return null
+    if (options.some((o) => new Date(o).getTime() <= now)) return null
+    return m
   }
   return null
 }
@@ -187,7 +199,7 @@ export function applyReply({
   const b = bookings.find((x) => x.id === bookingId)
   if (!b) throw new Error('booking not found')
 
-  const offer = openOffer(messages, b.id)
+  const offer = openOffer(messages, b, now)
   const u = understandReply(text, { now: new Date(now), offered: offer?.payload.options.length })
   const live = b.status === 'pending' || b.status === 'confirmed'
   let next = b
@@ -210,8 +222,10 @@ export function applyReply({
       offerOut.fallback = true
       ack = null
     } else {
+      // Picking a time is answering: the guard must not release it for silence.
+      next = withEvent(b, 'customer_confirmed', at, {}, 'اختار العميل موعده الجديد برسالة')
       next = withEvent(
-        b,
+        next,
         'rescheduled',
         at,
         // The business has not seen the new time yet.
@@ -244,7 +258,7 @@ export function applyReply({
     const ctx = { ...context(next, customers, services), ...offerOut }
     out.push(
       message(b.id, 'out', 'reschedule_offer', render('reschedule_offer', ctx), at, {
-        payload: { options: offerOut.options },
+        payload: { options: offerOut.options, from: next.startAt },
       }),
     )
   }

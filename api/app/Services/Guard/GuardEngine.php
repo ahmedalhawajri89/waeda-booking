@@ -36,6 +36,9 @@ class GuardEngine
     /** Messages the planner keys on — at most one of each per booking. */
     private const ONCE = ['reminder', 'confirm_request', 'deposit_request', 'release_notice'];
 
+    /** How long an offer of times can still be answered with a number. */
+    private const OFFER_OPEN_HOURS = 24;
+
     public function __construct(
         private BookingWriter $writer,
         private MessageChannel $channel,
@@ -133,7 +136,7 @@ class GuardEngine
         $tz = Organization::query()->whereKey($b->org_id)->value('timezone') ?? 'UTC';
         $local = Carbon::instance($now)->setTimezone($tz);
 
-        $offer = $this->openOffer($b);
+        $offer = $this->openOffer($b, $now);
         $offered = array_map(
             fn (string $at) => Carbon::parse($at)->setTimezone($tz)->format('Y-m-d H:i'),
             $offer?->payload['options'] ?? [],
@@ -152,6 +155,9 @@ class GuardEngine
             $target = Carbon::parse($offer->payload['options'][$u['option'] - 1]);
             $offer->update(['payload' => ['used' => true] + $offer->payload]);
             try {
+                // Picking a time is answering: the customer is coming, at the
+                // new time, so the guard must not release it for silence.
+                $this->writer->record($b, 'customer_confirmed', 'اختار العميل موعده الجديد برسالة');
                 // Under the resource lock: an offered time is not a held one.
                 $this->writer->update($b, ['start_at' => $target]);
                 // The customer moved it; the business has not seen the new time.
@@ -198,7 +204,12 @@ class GuardEngine
         if ($offerOut && $offerOut['options']) {
             $this->send($fresh, 'reschedule_offer', $templates, $now, once: false,
                 extra: ['options' => $offerOut['options'], 'fallback' => $offerOut['fallback']],
-                payload: ['options' => array_map(fn (Carbon $c) => $c->toIso8601String(), $offerOut['options'])]);
+                payload: [
+                    'options' => array_map(fn (Carbon $c) => $c->toIso8601String(), $offerOut['options']),
+                    // The time the offer was made against: once the booking
+                    // moves some other way, a "1" no longer means one of these.
+                    'from' => $fresh->start_at->toIso8601String(),
+                ]);
         }
         if ($ack) {
             $this->send($fresh, $ack, $templates, $now, once: false);
@@ -207,13 +218,32 @@ class GuardEngine
         return ['intent' => $intent, 'booking' => $fresh];
     }
 
-    /** The latest offer of times for this booking, unless it was already answered. */
-    private function openOffer(Booking $b): ?GuardMessage
+    /**
+     * The latest offer of times for this booking, while it can still be
+     * answered: not used, recent, made against the booking's current time,
+     * and with none of its times already past. Otherwise a "1" days later,
+     * meant as "confirm", would move the booking to a stale time.
+     */
+    private function openOffer(Booking $b, CarbonInterface $now): ?GuardMessage
     {
         $offer = GuardMessage::where('booking_id', $b->id)->where('direction', 'out')
             ->where('template', 'reschedule_offer')->orderByDesc('sent_at')->first();
 
-        return $offer && empty($offer->payload['used']) ? $offer : null;
+        if (! $offer || ! empty($offer->payload['used'])
+            || $offer->sent_at->lt(Carbon::instance($now)->subHours(self::OFFER_OPEN_HOURS))) {
+            return null;
+        }
+        $from = $offer->payload['from'] ?? null;
+        if ($from && ! Carbon::parse($from)->equalTo($b->start_at)) {
+            return null;
+        }
+        foreach ($offer->payload['options'] ?? [] as $at) {
+            if (Carbon::parse($at)->lte($now)) {
+                return null;
+            }
+        }
+
+        return $offer;
     }
 
     /**

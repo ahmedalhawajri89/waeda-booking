@@ -16,7 +16,13 @@ Artisan::command('inspire', function () {
 Artisan::command('guard:tick', function (App\Services\Guard\GuardEngine $guard) {
     $sent = 0;
     foreach (App\Models\Organization::query()->pluck('id') as $org) {
-        $sent += $guard->tick($org);
+        // One business's bad row must not silence the guard for every
+        // business after it: report it and carry on.
+        try {
+            $sent += $guard->tick($org);
+        } catch (Throwable $e) {
+            report($e);
+        }
     }
     $this->info("guard: {$sent} message(s) sent");
 })->purpose('Run the appointment guard for every organization');
