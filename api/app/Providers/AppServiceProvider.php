@@ -27,7 +27,13 @@ class AppServiceProvider extends ServiceProvider
         // guard keeps working through any outage on the model's side.
         $this->app->bind(ReplyUnderstanding::class, fn ($app) => config('guard.ai_key') && config('guard.ai_model')
             ? new AiUnderstanding(
-                new Client(apiKey: config('guard.ai_key')),
+                // Read inside a request, so a stalled model must fail fast and
+                // fall back to the rules. The SDK leaves timeouts to its HTTP
+                // client, hence the Guzzle instance rather than a bare option.
+                new Client(apiKey: config('guard.ai_key'), requestOptions: [
+                    'transporter' => new \GuzzleHttp\Client(['timeout' => 8, 'connect_timeout' => 3]),
+                    'maxRetries' => 1,
+                ]),
                 $app->make(RuleUnderstanding::class),
                 config('guard.ai_model'),
             )
