@@ -76,7 +76,14 @@ export const useSubscriptionStore = defineStore('subscription', () => {
     return { activated: isDemoBackend || !!next.activated }
   }
 
+  /** Back to nothing loaded — on sign-out, so the next operator never sees this. */
+  function reset() {
+    raw.value = null
+    loaded.value = false
+  }
+
   return {
+    reset,
     raw,
     loaded,
     load,

@@ -78,7 +78,25 @@ export async function request(path, opts = {}) {
   if (res.status === 204) return null
 
   const text = await res.text()
-  const body = text ? JSON.parse(text) : null
+  let body = null
+  try {
+    body = text ? JSON.parse(text) : null
+  } catch {
+    // A proxy's HTML error page: the status is what matters, not a SyntaxError.
+    if (res.ok) throw new ApiError(res.status, null)
+  }
+
+  // A token that died mid-session: sign out and come back here after
+  // signing in, rather than leaving every screen on a load error. The
+  // /auth/ calls are left to the auth store: start-up checks a stored token
+  // there on public pages too, and signing out may meet a dead one.
+  if (res.status === 401 && headers.Authorization && !path.startsWith('/auth/')) {
+    writeToken(null)
+    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+      const back = window.location.pathname + window.location.search
+      window.location.assign(`/login?redirect=${encodeURIComponent(back)}`)
+    }
+  }
   if (!res.ok) throw new ApiError(res.status, body)
   return body
 }

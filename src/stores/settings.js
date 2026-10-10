@@ -195,7 +195,18 @@ export const useSettingsStore = defineStore('settings', () => {
   const activeServices = computed(() => services.filter((s) => s.isActive))
   const activeResources = computed(() => resources.filter((r) => r.isActive))
 
+  /**
+   * Forgets that a catalog was loaded — on sign-out. The arrays in
+   * data/catalog are replaced by the next load(), which now has to run.
+   */
+  function reset() {
+    iconKeys.value = {}
+    error.value = null
+    loaded.value = false
+  }
+
   return {
+    reset,
     isLoading,
     error,
     loaded,

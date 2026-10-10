@@ -412,7 +412,15 @@ export const useBookingsStore = defineStore('bookings', () => {
     persist(b, before)
   }
 
+  /** Back to nothing loaded — on sign-out, so the next operator never sees these. */
+  function reset() {
+    items.value = []
+    error.value = null
+    loaded.value = false
+  }
+
   return {
+    reset,
     items,
     isLoading,
     error,

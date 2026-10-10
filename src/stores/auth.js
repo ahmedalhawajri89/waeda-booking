@@ -76,10 +76,12 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const data = await request('/auth/me')
       user.value = data.user
-    } catch {
-      // Expired, revoked, or signed out from another device. Clearing it here
-      // is what stops a dead token being retried on every subsequent request.
-      writeToken(null)
+    } catch (e) {
+      // Expired, revoked, or signed out from another device: clearing it here
+      // is what stops a dead token being retried on every request. Only the
+      // server saying so counts — offline or a 5xx on a reload is not a dead
+      // token, and must not sign the operator out.
+      if (e?.status === 401 || e?.status === 419) writeToken(null)
       user.value = null
     }
     initialised.value = true
@@ -272,6 +274,9 @@ export const useAuthStore = defineStore('auth', () => {
   async function signOut() {
     const wasSignedIn = user.value !== null
     user.value = null
+    // What this business loaded must not survive into the next session.
+    const { resetSessionStores } = await import('@/stores/session')
+    resetSessionStores()
     if (isDemoBackend) {
       localStorage.removeItem(KEY)
       return

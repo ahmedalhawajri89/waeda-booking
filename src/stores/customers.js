@@ -79,5 +79,12 @@ export const useCustomersStore = defineStore('customers', () => {
     return customer
   }
 
-  return { items, isLoading, error, loaded, load, byId, byPhone, sorted, search, upsert }
+  /** Back to nothing loaded — on sign-out, so the next operator never sees these. */
+  function reset() {
+    items.value = []
+    error.value = null
+    loaded.value = false
+  }
+
+  return { reset, items, isLoading, error, loaded, load, byId, byPhone, sorted, search, upsert }
 })

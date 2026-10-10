@@ -263,7 +263,16 @@ export const useGuardStore = defineStore('guard', () => {
     ),
   )
 
+  /** Back to nothing loaded — on sign-out, so the next operator never sees these. */
+  function reset() {
+    policy.value = withDefaults(null)
+    loaded.value = false
+    messages.value = []
+    waitlist.value = []
+  }
+
   return {
+    reset,
     policy,
     loaded,
     saving,
