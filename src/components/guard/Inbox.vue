@@ -299,7 +299,7 @@ customers.load()
           />
           <input
             v-model="query"
-            class="border-border bg-surface-sunken text-fg placeholder:text-fg-faint focus:border-fg h-9 w-full rounded-[var(--radius-md)] border ps-9 pe-3 text-sm outline-none"
+            class="border-border bg-surface-sunken text-fg placeholder:text-fg-faint focus:border-fg h-9 w-full rounded-[var(--radius-md)] border ps-9 pe-3 text-sm"
             placeholder="ابحث باسم العميل أو جواله"
             aria-label="ابحث في المحادثات"
           />
@@ -558,7 +558,7 @@ customers.load()
               ref="box"
               v-model="draft"
               rows="1"
-              class="border-border bg-surface-sunken text-fg placeholder:text-fg-faint focus:border-fg [field-sizing:content] max-h-32 min-h-[2.5rem] flex-1 resize-none rounded-[var(--radius-md)] border px-3 py-2 text-sm outline-none"
+              class="border-border bg-surface-sunken text-fg placeholder:text-fg-faint focus:border-fg [field-sizing:content] max-h-32 min-h-[2.5rem] flex-1 resize-none rounded-[var(--radius-md)] border px-3 py-2 text-sm"
               :placeholder="
                 mode === 'staff'
                   ? `اكتب ردك إلى ${selected.view?.customer?.name?.split(' ')[0] ?? 'العميل'}…`

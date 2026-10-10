@@ -17,9 +17,11 @@ const props = defineProps({
   /** id of a <datalist> to suggest from. */
   list: { type: String, required: false },
   autocomplete: { type: String, required: false },
+  /** The keyboard a phone shows: "tel", "numeric", "email"… */
+  inputmode: { type: String, required: false },
 })
 
-defineEmits(['update:modelValue'])
+defineEmits(['update:modelValue', 'blur'])
 
 const id = useId()
 const hintId = computed(() => (props.hint ? `${id}-hint` : undefined))
@@ -54,9 +56,10 @@ const describedBy = computed(
         :rows="rows"
         :aria-invalid="error ? true : undefined"
         :aria-describedby="describedBy"
-        class="focus:border-primary bg-surface text-fg placeholder:text-fg-faint disabled:bg-surface-sunken disabled:text-fg-faint w-full resize-none rounded-[var(--radius-md)] border px-3 py-2.5 text-sm transition-colors focus:outline-none"
+        class="focus:border-primary bg-surface text-fg placeholder:text-fg-faint disabled:bg-surface-sunken disabled:text-fg-faint w-full resize-none rounded-[var(--radius-md)] border px-3 py-2.5 text-sm transition-colors"
         :class="error ? 'border-danger-700/50' : 'border-border'"
         @input="$emit('update:modelValue', $event.target.value)"
+        @blur="$emit('blur')"
       />
 
       <input
@@ -66,23 +69,25 @@ const describedBy = computed(
         :value="modelValue"
         :list="list"
         :autocomplete="autocomplete"
+        :inputmode="inputmode"
         :placeholder="placeholder"
         :required="required"
         :disabled="disabled"
         :dir="ltr ? 'ltr' : undefined"
         :aria-invalid="error ? true : undefined"
         :aria-describedby="describedBy"
-        class="focus:border-primary bg-surface text-fg placeholder:text-fg-faint disabled:bg-surface-sunken disabled:text-fg-faint h-10 w-full rounded-[var(--radius-md)] border px-3 text-sm transition-colors focus:outline-none"
+        class="focus:border-primary bg-surface text-fg placeholder:text-fg-faint disabled:bg-surface-sunken disabled:text-fg-faint h-10 w-full rounded-[var(--radius-md)] border px-3 text-sm transition-colors"
         :class="[
           error ? 'border-danger-700/50' : 'border-border',
           icon && 'ps-9',
           ltr && 'text-start',
         ]"
         @input="$emit('update:modelValue', $event.target.value)"
+        @blur="$emit('blur')"
       />
     </div>
 
-    <p v-if="error" :id="errorId" class="text-danger-700 mt-1.5 text-xs font-medium">
+    <p v-if="error" :id="errorId" role="alert" class="text-danger-700 mt-1.5 text-xs font-medium">
       {{ error }}
     </p>
     <p v-else-if="hint" :id="hintId" class="text-fg-subtle mt-1.5 text-xs">{{ hint }}</p>

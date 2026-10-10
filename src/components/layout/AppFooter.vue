@@ -45,17 +45,20 @@ const COLUMNS = [
         </div>
         <nav v-for="c in COLUMNS" :key="c.title" :aria-label="c.title">
           <p class="text-fg mb-4 text-sm font-bold">{{ c.title }}</p>
-          <ul class="space-y-2.5 text-sm">
+          <ul class="space-y-1 text-sm">
             <li v-for="l in c.links" :key="l.label">
               <RouterLink
                 v-if="l.to"
                 :to="l.to"
-                class="text-fg-subtle hover:text-fg transition-colors"
+                class="text-fg-subtle hover:text-fg inline-block py-1.5 transition-colors"
                 >{{ l.label }}</RouterLink
               >
-              <a v-else :href="l.href" class="text-fg-subtle hover:text-fg transition-colors">{{
-                l.label
-              }}</a>
+              <a
+                v-else
+                :href="l.href"
+                class="text-fg-subtle hover:text-fg inline-block py-1.5 transition-colors"
+                >{{ l.label }}</a
+              >
             </li>
           </ul>
         </nav>

@@ -207,7 +207,7 @@ const STATE = {
             <input
               v-model="draft.startsOn"
               type="date"
-              class="border-border bg-surface text-fg focus:border-primary h-10 w-full rounded-[var(--radius-md)] border px-2 text-sm focus:outline-none"
+              class="border-border bg-surface text-fg focus:border-primary h-10 w-full rounded-[var(--radius-md)] border px-2 text-sm"
               dir="ltr"
             />
           </label>
@@ -216,7 +216,7 @@ const STATE = {
             <input
               v-model="draft.endsOn"
               type="date"
-              class="border-border bg-surface text-fg focus:border-primary h-10 w-full rounded-[var(--radius-md)] border px-2 text-sm focus:outline-none"
+              class="border-border bg-surface text-fg focus:border-primary h-10 w-full rounded-[var(--radius-md)] border px-2 text-sm"
               dir="ltr"
             />
           </label>

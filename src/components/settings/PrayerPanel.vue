@@ -87,7 +87,7 @@ function save() {
           <span class="text-fg-muted mb-1.5 block text-[13px] font-semibold">المدينة</span>
           <select
             v-model="draft.city"
-            class="border-border bg-surface text-fg focus:border-primary h-10 w-full rounded-[var(--radius-md)] border px-2 text-sm focus:outline-none"
+            class="border-border bg-surface text-fg focus:border-primary h-10 w-full rounded-[var(--radius-md)] border px-2 text-sm"
           >
             <optgroup v-for="[country, list] in groups" :key="country" :label="country">
               <option v-for="c in list" :key="c.key" :value="c.key">{{ c.name }}</option>

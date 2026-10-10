@@ -538,7 +538,7 @@ async function resetData() {
                     v-model="h.open"
                     type="time"
                     :aria-label="`فتح ${WEEKDAYS[h.weekday]}`"
-                    class="border-border bg-surface text-fg focus:border-primary h-9 min-w-0 rounded-[var(--radius-md)] border px-2 text-sm focus:outline-none"
+                    class="border-border bg-surface text-fg focus:border-primary h-9 min-w-0 rounded-[var(--radius-md)] border px-2 text-sm"
                     dir="ltr"
                   />
                   <span class="text-fg-subtle">–</span>
@@ -546,7 +546,7 @@ async function resetData() {
                     v-model="h.close"
                     type="time"
                     :aria-label="`إغلاق ${WEEKDAYS[h.weekday]}`"
-                    class="border-border bg-surface text-fg focus:border-primary h-9 min-w-0 rounded-[var(--radius-md)] border px-2 text-sm focus:outline-none"
+                    class="border-border bg-surface text-fg focus:border-primary h-9 min-w-0 rounded-[var(--radius-md)] border px-2 text-sm"
                     dir="ltr"
                   />
                 </div>

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { addDays, format, isSameDay, startOfDay } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import {
@@ -28,6 +28,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { bookableResources, bookableServices, schedule, services } from '@/data/catalog'
 import { durationsOf, priceFor } from '@/lib/pricing'
 import { windowFor } from '@/lib/hours'
+import { arrowToRadio } from '@/lib/radioKeys'
 import { isGroup } from '@/lib/sessions'
 import { business, initialOf } from '@/data/business'
 import { isConflict } from '@/data/errors'
@@ -79,6 +80,30 @@ watch(phone, (v) => {
 })
 const notes = ref('')
 const touched = ref(false)
+/** A field is checked once the guest leaves it, not only when they press the button. */
+const left = ref({ name: false, phone: false })
+
+/**
+ * The on-screen keyboard is open: the phone's bottom bar steps aside, or the
+ * keyboard would carry it up over the field being filled in. Judged by the
+ * visible area shrinking, not by focus alone — with no keyboard (a desktop,
+ * a hardware keyboard) the bar and its button stay.
+ */
+const typing = ref(false)
+function onViewport() {
+  const vv = window.visualViewport
+  const field = document.activeElement
+  const inField = field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement
+  typing.value = !!vv && inField && vv.height < window.innerHeight - 120
+}
+onMounted(() => {
+  window.visualViewport?.addEventListener('resize', onViewport)
+  document.addEventListener('focusout', onViewport)
+})
+onBeforeUnmount(() => {
+  window.visualViewport?.removeEventListener('resize', onViewport)
+  document.removeEventListener('focusout', onViewport)
+})
 
 /** 'form' → 'verify' (first time on this phone) → 'done' */
 const stage = ref('form')
@@ -172,6 +197,11 @@ const emptyDay = computed(() => {
   return 'كل الأوقات في هذا اليوم محجوزة. اختر يوماً آخر، أو اطلب أن ننبّهك إذا تفرّغ وقت.'
 })
 const grouped = computed(() => groupByPeriod(slots.value))
+/** The one time Tab lands on: the chosen one, else the first free one. */
+const tabSlot = computed(() => {
+  const free = slots.value.filter((s) => s.state === 'available')
+  return (free.find((s) => s.startAt === startAt.value) ?? free[0])?.startAt ?? null
+})
 const dayIsFull = computed(
   () => slots.value.length > 0 && !slots.value.some((s) => s.state === 'available'),
 )
@@ -256,13 +286,15 @@ function takeNearest() {
 
 /* ------------------------------------------------------------- details */
 const phoneError = computed(() => {
-  if (!touched.value) return undefined
+  if (!touched.value && !left.value.phone) return undefined
   const digits = digitsOnly(phone.value)
   if (!digits) return 'رقم الجوال مطلوب'
   if (digits.length < 9) return 'رقم الجوال غير مكتمل'
   return undefined
 })
-const nameError = computed(() => (touched.value && !name.value.trim() ? 'الاسم مطلوب' : undefined))
+const nameError = computed(() =>
+  (touched.value || left.value.name) && !name.value.trim() ? 'الاسم مطلوب' : undefined,
+)
 
 const done = computed(() => ({
   service: !!service.value,
@@ -929,16 +961,24 @@ const dayTitle = computed(() =>
             </div>
 
             <!-- who: by gender first, when the team has both -->
-            <div v-if="mixed" role="radiogroup" aria-label="المختص" class="flex gap-1" data-gender>
+            <div
+              v-if="mixed"
+              role="radiogroup"
+              aria-label="المختص"
+              class="bg-surface-sunken flex gap-1 rounded-[var(--radius-md)] p-1"
+              data-gender
+            >
               <button
                 v-for="g in GENDERS"
                 :key="g.value"
                 type="button"
                 role="radio"
                 :aria-checked="gender === g.value"
-                class="rounded-full px-3 py-1 text-xs font-semibold transition-colors"
+                class="min-h-10 flex-1 rounded-[var(--radius-sm)] px-4 text-sm font-semibold transition-colors"
                 :class="
-                  gender === g.value ? 'bg-surface-sunken text-fg' : 'text-fg-subtle hover:text-fg'
+                  gender === g.value
+                    ? 'bg-surface text-fg elev-raised'
+                    : 'text-fg-subtle hover:text-fg'
                 "
                 @click="gender = g.value"
               >
@@ -1027,7 +1067,7 @@ const dayTitle = computed(() =>
               >
                 {{ emptyDay }}
               </p>
-              <div v-else class="space-y-4">
+              <div v-else class="space-y-4" @keydown="arrowToRadio($event, $event.currentTarget)">
                 <div v-for="g in grouped" :key="g.key">
                   <p class="text-fg-subtle mb-2 text-xs">{{ g.label }}</p>
                   <div
@@ -1041,9 +1081,10 @@ const dayTitle = computed(() =>
                       type="button"
                       role="radio"
                       :aria-checked="startAt === s.startAt"
+                      :tabindex="s.startAt === tabSlot ? 0 : -1"
                       :disabled="s.state !== 'available'"
                       :aria-label="s.state === 'available' ? s.label : `${s.label}، غير متاح`"
-                      class="flex min-h-10 flex-col items-center justify-center rounded-[var(--radius-md)] border py-1 text-sm font-semibold transition-colors"
+                      class="flex min-h-11 flex-col items-center justify-center rounded-[var(--radius-md)] border py-1 text-sm font-semibold transition-colors"
                       :class="
                         startAt === s.startAt
                           ? 'border-primary bg-primary text-white'
@@ -1057,7 +1098,7 @@ const dayTitle = computed(() =>
                       {{ s.label }}
                       <span
                         v-if="pricedTimes && s.state === 'available'"
-                        class="text-[10px] font-medium opacity-70"
+                        class="text-xs font-medium opacity-80"
                         >{{ money(s.priceMinor) }}</span
                       >
                     </button>
@@ -1099,7 +1140,9 @@ const dayTitle = computed(() =>
               label="الاسم الكامل"
               :icon="User"
               required
+              autocomplete="name"
               :error="nameError"
+              @blur="left.name = true"
             />
             <BaseInput
               v-model="phone"
@@ -1108,8 +1151,11 @@ const dayTitle = computed(() =>
               :icon="Phone"
               ltr
               required
+              autocomplete="tel"
+              inputmode="tel"
               placeholder="05XXXXXXXX"
               :error="phoneError"
+              @blur="left.phone = true"
               hint="يصلك عليه التذكير وتأكيد الموعد."
             />
             <BaseInput
@@ -1179,8 +1225,11 @@ const dayTitle = computed(() =>
       </aside>
 
       <!-- summary: a bar along the bottom on a phone -->
+      <!-- Out of the way while typing: on a phone the keyboard would carry it
+           up over the very field being filled in. -->
       <div
-        class="bg-surface/95 border-border fixed inset-x-0 bottom-0 z-30 border-t px-4 py-3 backdrop-blur lg:hidden"
+        v-show="!typing"
+        class="bg-surface/95 border-border fixed inset-x-0 bottom-0 z-30 border-t px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur lg:hidden"
       >
         <div class="mx-auto flex max-w-6xl items-center gap-3">
           <div class="min-w-0 flex-1">
@@ -1190,6 +1239,9 @@ const dayTitle = computed(() =>
             <p class="text-fg-subtle truncate text-xs" data-numeric>
               <template v-if="startAt">{{ fullDate(startAt) }} · {{ time(startAt) }} · </template>
               {{ service ? money(price) : '' }}
+            </p>
+            <p v-if="service" class="text-fg-subtle truncate text-xs">
+              الدفع في المنشأة عند الحضور
             </p>
           </div>
           <button

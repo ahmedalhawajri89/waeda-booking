@@ -94,7 +94,7 @@ async function send(text = draft.value) {
               : 'border-border text-fg bg-surface rounded-se-sm border'
           "
         >
-          <p class="text-fg-subtle mb-1 flex items-center gap-1 text-[10px] font-semibold">
+          <p class="text-fg-subtle mb-1 flex items-center gap-1 text-xs font-semibold">
             <component
               :is="m.direction === 'out' ? Bot : UserRound"
               class="h-3 w-3"
@@ -120,7 +120,7 @@ async function send(text = draft.value) {
               {{ i + 1 }} · {{ relativeDay(at) }} {{ time(at) }}
             </button>
           </div>
-          <p class="text-fg-faint mt-1 flex items-center justify-between gap-3 text-[10px]">
+          <p class="text-fg-subtle mt-1 flex items-center justify-between gap-3 text-xs">
             <span v-if="m.intent" :class="INTENT[m.intent].tone" class="font-semibold">
               {{ INTENT[m.intent].label }}
             </span>
@@ -138,7 +138,7 @@ async function send(text = draft.value) {
           v-model="draft"
           type="text"
           placeholder="اكتب كما يكتب العميل…"
-          class="border-border focus:border-primary bg-surface h-10 min-w-0 flex-1 rounded-[var(--radius-md)] border px-3 text-sm outline-none"
+          class="border-border focus:border-primary bg-surface h-10 min-w-0 flex-1 rounded-[var(--radius-md)] border px-3 text-sm"
           autocomplete="off"
         />
         <button

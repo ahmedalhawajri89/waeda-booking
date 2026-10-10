@@ -622,7 +622,7 @@ const CHANNEL = { online: 'من صفحة الحجز', phone: 'حجز هاتفي'
             <textarea
               v-model="noteDraft"
               rows="3"
-              class="border-border bg-surface text-fg focus:border-fg w-full rounded-[var(--radius-md)] border p-2.5 text-sm outline-none"
+              class="border-border bg-surface text-fg focus:border-fg w-full rounded-[var(--radius-md)] border p-2.5 text-sm"
               aria-label="ملاحظات الحجز"
             />
             <div class="flex justify-end gap-2">

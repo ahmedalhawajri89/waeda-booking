@@ -134,7 +134,7 @@ const DAY_NAMES = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأر
           <span
             v-for="t in ticks"
             :key="t.label"
-            class="text-fg-subtle absolute text-[10px]"
+            class="text-fg-subtle absolute text-[11px]"
             :style="{ top: `${t.top - 6}px`, insetInlineStart: 0 }"
             data-numeric
           >
@@ -171,7 +171,7 @@ const DAY_NAMES = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأر
             :title="`${b.view.customer?.name} · ${b.view.service?.name}`"
             @click="$emit('open', b.booking.id)"
           >
-            <span class="block truncate text-[10px] leading-[14px] font-bold">
+            <span class="block truncate text-[11px] leading-4 font-bold">
               {{ b.view.customer?.name }}
             </span>
           </button>

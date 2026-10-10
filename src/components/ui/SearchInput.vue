@@ -27,7 +27,7 @@ defineExpose({ focus: () => input.value?.focus() })
       :value="modelValue"
       :placeholder="placeholder"
       :aria-label="placeholder"
-      class="focus:border-primary bg-surface border-border text-fg placeholder:text-fg-faint h-10 w-full rounded-[var(--radius-md)] border ps-9 pe-9 text-sm transition-colors focus:outline-none"
+      class="focus:border-primary bg-surface border-border text-fg placeholder:text-fg-faint h-10 w-full rounded-[var(--radius-md)] border ps-9 pe-9 text-sm transition-colors"
       @input="emit('update:modelValue', $event.target.value)"
     />
     <button

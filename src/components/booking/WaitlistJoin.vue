@@ -186,10 +186,18 @@ async function onCode(entered) {
         </div>
 
         <div class="grid gap-3 sm:grid-cols-2">
-          <BaseInput v-model="name" label="الاسم" :icon="User" :error="nameError" />
+          <BaseInput
+            v-model="name"
+            label="الاسم"
+            :icon="User"
+            autocomplete="name"
+            :error="nameError"
+          />
           <BaseInput
             v-model="phone"
             label="رقم الجوال"
+            autocomplete="tel"
+            inputmode="tel"
             type="tel"
             :icon="Phone"
             ltr

@@ -31,6 +31,8 @@ import { business } from '@/data/business'
 import { isConflict } from '@/data/errors'
 import { isDemoBackend } from '@/data/repository'
 import { useGuestBusiness } from '@/composables/useGuestBusiness'
+import { useFocusTrap } from '@/composables/useFocusTrap'
+import { arrowToRadio } from '@/lib/radioKeys'
 import { inZone, nowInZone } from '@/lib/zone'
 import { usePhoneCode } from '@/composables/usePhoneCode'
 import CodeInput from '@/components/booking/CodeInput.vue'
@@ -308,6 +310,11 @@ const movableOn = (day) =>
     .filter((s) => s.startAt !== view.value?.startAt)
 const slots = computed(() => movableOn(newDate.value))
 const grouped = computed(() => groupByPeriod(slots.value))
+/** The one time Tab lands on: the chosen one, else the first free one. */
+const tabSlot = computed(() => {
+  const free = slots.value.filter((s) => s.state === 'available')
+  return (free.find((s) => s.startAt === newStart.value) ?? free[0])?.startAt ?? null
+})
 const freeCount = (day) => {
   const n = avail.freeCount(day, query.value)
   return n < 0 ? n : movableOn(day).filter((s) => s.state === 'available').length
@@ -369,6 +376,9 @@ async function saveMove() {
 
 /* ---------------------------------------------------------- let it go */
 const askCancel = ref(false)
+const cancelPanel = ref(null)
+// Escape closes it, Tab stays inside, and focus returns to «إلغاء الحجز».
+useFocusTrap(askCancel, cancelPanel, () => (askCancel.value = false))
 const cancelling = ref(false)
 
 async function cancel() {
@@ -460,12 +470,18 @@ function moveInstead() {
           <BaseInput
             v-model="phone"
             label="رقم الجوال"
+            autocomplete="tel"
+            inputmode="tel"
             type="tel"
             :icon="Phone"
             ltr
             required
             placeholder="05XXXXXXXX"
-            :error="attempted && !verified && !checking ? 'الرقم لا يطابق هذا الحجز' : undefined"
+            :error="
+              attempted && !verified && !checking && !askingCode
+                ? 'الرقم لا يطابق هذا الحجز'
+                : undefined
+            "
           />
           <button
             type="submit"
@@ -611,7 +627,7 @@ function moveInstead() {
               >
                 لا أوقات متاحة في هذا اليوم. اختر يوماً آخر.
               </p>
-              <div v-else class="space-y-4">
+              <div v-else class="space-y-4" @keydown="arrowToRadio($event, $event.currentTarget)">
                 <div v-for="g in grouped" :key="g.key">
                   <p class="text-fg-subtle mb-2 text-xs">{{ g.label }}</p>
                   <div
@@ -625,8 +641,9 @@ function moveInstead() {
                       type="button"
                       role="radio"
                       :aria-checked="newStart === s.startAt"
+                      :tabindex="s.startAt === tabSlot ? 0 : -1"
                       :disabled="s.state !== 'available'"
-                      class="h-10 rounded-[var(--radius-md)] border text-sm font-semibold transition-colors"
+                      class="h-11 rounded-[var(--radius-md)] border text-sm font-semibold transition-colors"
                       :class="
                         newStart === s.startAt
                           ? 'border-primary bg-primary text-white'
@@ -702,6 +719,7 @@ function moveInstead() {
           @mousedown.self="askCancel = false"
         >
           <div
+            ref="cancelPanel"
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="cancel-h"

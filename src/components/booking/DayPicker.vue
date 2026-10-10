@@ -41,6 +41,15 @@ const days = computed(() =>
 
 const label = computed(() => format(days.value[0].date, 'MMMM yyyy', { locale: ar }))
 
+/** The day Tab lands on: the chosen one when it is on this week, else the first open one. */
+const tabDay = computed(
+  () =>
+    (
+      days.value.find((d) => isSameDay(d.date, props.modelValue)) ??
+      days.value.find((d) => !d.closed)
+    )?.date,
+)
+
 function pick(d) {
   if (!d.closed) emit('update:modelValue', d.date)
 }
@@ -66,7 +75,7 @@ function onKey(e, i) {
       <div class="flex gap-1">
         <button
           type="button"
-          class="border-border text-fg-muted hover:bg-surface-hover grid h-8 w-8 place-items-center rounded-[var(--radius-md)] border disabled:opacity-40"
+          class="border-border text-fg-muted hover:bg-surface-hover grid h-11 w-11 place-items-center rounded-[var(--radius-md)] border disabled:opacity-40"
           :disabled="page === 0"
           aria-label="الأسبوع السابق"
           @click="page--"
@@ -75,7 +84,7 @@ function onKey(e, i) {
         </button>
         <button
           type="button"
-          class="border-border text-fg-muted hover:bg-surface-hover grid h-8 w-8 place-items-center rounded-[var(--radius-md)] border disabled:opacity-40"
+          class="border-border text-fg-muted hover:bg-surface-hover grid h-11 w-11 place-items-center rounded-[var(--radius-md)] border disabled:opacity-40"
           :disabled="page >= weeks - 1"
           aria-label="الأسبوع التالي"
           @click="page++"
@@ -95,7 +104,7 @@ function onKey(e, i) {
         :aria-checked="isSameDay(d.date, modelValue)"
         :aria-label="`${format(d.date, 'EEEE d MMMM', { locale: ar })}${d.closed ? '، مغلق' : d.full ? '، محجوز بالكامل' : ''}`"
         :disabled="d.closed"
-        :tabindex="isSameDay(d.date, modelValue) ? 0 : -1"
+        :tabindex="d.date === tabDay ? 0 : -1"
         class="flex flex-col items-center gap-0.5 rounded-[var(--radius-md)] border pt-2 pb-2.5 transition-colors disabled:cursor-not-allowed"
         :class="
           isSameDay(d.date, modelValue)

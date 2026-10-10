@@ -340,7 +340,7 @@ const reasons = (risk) => notableFactors(risk, { raising: true, limit: 2 }).map(
                           :style="{ width: pct(risk.probability) }"
                         />
                       </span>
-                      <p class="text-fg-faint mt-1 text-[10px]">
+                      <p class="text-fg-subtle mt-1 text-xs">
                         {{ risk.tier === 'high' ? 'مرتفع' : 'متوسط' }}
                       </p>
                     </div>

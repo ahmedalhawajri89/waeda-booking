@@ -403,6 +403,7 @@ const price = (p) => (Number(p) > 0 ? `${Number(p)} ر.س` : 'مجاناً')
               v-model="account.fullName"
               label="اسمك"
               :icon="User"
+              autocomplete="name"
               required
               :error="err('fullName')"
             />
@@ -410,6 +411,7 @@ const price = (p) => (Number(p) > 0 ? `${Number(p)} ر.س` : 'مجاناً')
               v-model="account.email"
               label="البريد الإلكتروني"
               type="email"
+              autocomplete="email"
               :icon="Mail"
               ltr
               required
@@ -421,6 +423,7 @@ const price = (p) => (Number(p) > 0 ? `${Number(p)} ر.س` : 'مجاناً')
                 v-model="account.password"
                 label="كلمة المرور"
                 :type="showPassword ? 'text' : 'password'"
+                autocomplete="new-password"
                 :icon="Lock"
                 ltr
                 required
@@ -525,7 +528,7 @@ const price = (p) => (Number(p) > 0 ? `${Number(p)} ر.س` : 'مجاناً')
                 >رابط صفحة الحجز</label
               >
               <div
-                class="bg-surface focus-within:border-fg flex items-center overflow-hidden rounded-[var(--radius-md)] border transition-colors"
+                class="bg-surface focus-within:border-fg focus-within:outline-ring flex items-center overflow-hidden rounded-[var(--radius-md)] border transition-colors focus-within:outline-2 focus-within:outline-offset-2"
                 :class="err('slug') ? 'border-danger-600' : 'border-border'"
                 dir="ltr"
               >
@@ -617,7 +620,7 @@ const price = (p) => (Number(p) > 0 ? `${Number(p)} ر.س` : 'مجاناً')
                 />
                 <input
                   v-model="s.name"
-                  class="text-fg border-border focus:border-fg min-w-0 rounded-[var(--radius-sm)] border bg-transparent px-2.5 py-2 text-sm font-semibold outline-none"
+                  class="text-fg border-border focus:border-fg min-w-0 rounded-[var(--radius-sm)] border bg-transparent px-2.5 py-2 text-sm font-semibold"
                   placeholder="اسم الخدمة"
                   aria-label="اسم الخدمة"
                 />
@@ -629,7 +632,7 @@ const price = (p) => (Number(p) > 0 ? `${Number(p)} ر.س` : 'مجاناً')
                   <option v-for="d in DURATIONS" :key="d" :value="d">{{ duration(d) }}</option>
                 </select>
                 <label
-                  class="border-border focus-within:border-fg col-start-2 flex items-center rounded-[var(--radius-sm)] border sm:col-start-auto"
+                  class="border-border focus-within:border-fg focus-within:outline-ring col-start-2 flex items-center rounded-[var(--radius-sm)] border focus-within:outline-2 focus-within:outline-offset-2 sm:col-start-auto"
                 >
                   <input
                     v-model.number="s.price"
@@ -684,7 +687,7 @@ const price = (p) => (Number(p) > 0 ? `${Number(p)} ر.س` : 'مجاناً')
             <form class="flex max-w-md gap-2" @submit.prevent="addStaff">
               <input
                 v-model="newStaff"
-                class="border-border bg-surface text-fg focus:border-fg min-w-0 flex-1 rounded-[var(--radius-md)] border px-3 py-2.5 text-sm outline-none"
+                class="border-border bg-surface text-fg focus:border-fg min-w-0 flex-1 rounded-[var(--radius-md)] border px-3 py-2.5 text-sm"
                 :placeholder="`مثلاً: ${sector.staffPlaceholder}`"
                 :aria-label="`اسم ${sector.staffRole}`"
               />

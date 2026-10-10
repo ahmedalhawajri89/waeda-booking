@@ -104,7 +104,7 @@
   --color-fg: #111110;
   --color-fg-muted: #52524e;
   --color-fg-subtle: #6b6b66;
-  --color-fg-faint: #a3a39e;
+  --color-fg-faint: #73736d;
   --color-fg-inverse: #fafaf9;
   --color-fg-on-primary: #ffffff;
   --color-overlay: rgb(17 17 16 / 0.4);
@@ -168,7 +168,7 @@
   --color-fg: #f2f2ee;
   --color-fg-muted: #b8b8b2;
   --color-fg-subtle: #9a9a94;
-  --color-fg-faint: #5c5c57;
+  --color-fg-faint: #85857f;
   --color-fg-inverse: #111110;
   --color-overlay: rgb(0 0 0 / 0.6);
   --color-ring: #f2703f;

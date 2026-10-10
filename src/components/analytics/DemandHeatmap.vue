@@ -56,7 +56,7 @@ function hourLabel(hour) {
             v-for="h in hours"
             :key="h"
             scope="col"
-            class="text-fg-subtle pb-1 text-[10px] font-medium"
+            class="text-fg-subtle pb-1 text-xs font-medium"
             data-numeric
           >
             {{ hourLabel(h) }}

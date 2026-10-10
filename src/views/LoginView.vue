@@ -78,7 +78,7 @@ const DAY = [
 </script>
 
 <template>
-  <div class="bg-surface grid min-h-screen lg:grid-cols-2">
+  <div class="bg-surface grid min-h-screen grid-cols-1 lg:grid-cols-2">
     <!-- form -->
     <div class="flex flex-col px-4 py-6 sm:px-10">
       <AppLogo compact />
@@ -110,6 +110,7 @@ const DAY = [
             v-model="email"
             label="البريد الإلكتروني"
             type="email"
+            autocomplete="email"
             :icon="Mail"
             ltr
             required
@@ -120,6 +121,7 @@ const DAY = [
               v-model="password"
               label="كلمة المرور"
               :type="showPassword ? 'text' : 'password'"
+              autocomplete="current-password"
               :icon="Lock"
               ltr
               required
@@ -167,7 +169,7 @@ const DAY = [
           <form class="flex gap-2" @submit.prevent="findBooking">
             <input
               v-model="reference"
-              class="border-border bg-surface text-fg focus:border-fg min-w-0 flex-1 rounded-[var(--radius-md)] border px-3 py-2.5 text-sm outline-none"
+              class="border-border bg-surface text-fg focus:border-fg min-w-0 flex-1 rounded-[var(--radius-md)] border px-3 py-2.5 text-sm"
               placeholder="BK-2026-0000"
               aria-label="رقم الحجز"
               dir="ltr"
