@@ -13,10 +13,28 @@ import PhoneFrame from './PhoneFrame.vue'
  */
 
 /* 0 idle · 1 time picked · 2 booked · 3 on the calendar · 4 reminder · 5 replied · 6 confirmed */
-const stage = ref(0)
+// It opens on the finished story — a booking, a reminder, a "yes" — rather
+// than on an empty phone that only fills in seconds later.
+const stage = ref(6)
 const timers = []
+const root = ref(null)
+/** Played twice at most, and only while on screen: motion that never stops wears. */
+const MAX_LOOPS = 2
+let loops = 0
+let observer
+
+function clear() {
+  timers.forEach(clearTimeout)
+  timers.length = 0
+}
 
 function run() {
+  clear()
+  if (loops >= MAX_LOOPS) {
+    stage.value = 6
+    return
+  }
+  loops += 1
   stage.value = 0
   ;[
     [900, 1],
@@ -30,10 +48,24 @@ function run() {
 }
 
 onMounted(() => {
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) stage.value = 6
-  else run()
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  observer = new IntersectionObserver(
+    ([entry]) => {
+      if (entry.isIntersecting) {
+        if (!timers.length) timers.push(setTimeout(run, 2500))
+      } else {
+        clear()
+        stage.value = 6
+      }
+    },
+    { threshold: 0.3 },
+  )
+  observer.observe(root.value)
 })
-onBeforeUnmount(() => timers.forEach(clearTimeout))
+onBeforeUnmount(() => {
+  clear()
+  observer?.disconnect()
+})
 
 const TIMES = ['9:30', '10:00', '11:00', '11:30', '12:30', '1:00']
 const DAY = [
@@ -47,77 +79,80 @@ const stepOf = (s) => (s < 3 ? 0 : s < 4 ? 1 : 2)
 </script>
 
 <template>
-  <div aria-hidden="true">
+  <div ref="root" aria-hidden="true">
     <div
       class="mx-auto grid max-w-5xl grid-cols-2 items-center gap-4 sm:gap-8 lg:grid-cols-[12.5rem_1fr_22rem_1fr_12.5rem] lg:gap-0"
     >
       <!-- 1 · the customer's booking page -->
-      <PhoneFrame class="phone mx-auto" time="7:42">
-        <div class="flex h-full flex-col px-3.5 pt-2 pb-3.5">
-          <div class="border-border mb-3 flex items-center gap-2 border-b pb-2.5">
-            <span class="bg-ink grid h-7 w-7 place-items-center rounded-[7px] text-white">
-              <Stethoscope class="h-3.5 w-3.5" />
-            </span>
-            <div class="min-w-0">
-              <p class="text-fg truncate text-[11px] font-bold">عيادات النخبة</p>
-              <p class="text-fg-faint text-[9px]" dir="ltr">waeda.app/nokhba</p>
-            </div>
-          </div>
-
-          <p class="text-fg-subtle mb-1.5 text-[9px] font-semibold">الخدمة</p>
-          <div
-            class="border-primary bg-primary-soft mb-3 flex items-center justify-between rounded-[8px] border px-2.5 py-2"
-          >
-            <span class="text-fg text-[10px] font-bold">كشف عام</span>
-            <span class="text-fg-subtle text-[9px]" data-numeric>20 د · 150 ر.س</span>
-          </div>
-
-          <p class="text-fg-subtle mb-1.5 text-[9px] font-semibold">غداً، الأحد 12 أكتوبر</p>
-          <div class="mb-auto grid grid-cols-3 gap-1.5">
-            <span
-              v-for="t in TIMES"
-              :key="t"
-              class="rounded-[6px] border py-1.5 text-center text-[10px] font-semibold transition-colors duration-300"
-              :class="
-                t === '11:00' && stage >= 1
-                  ? 'border-primary bg-primary text-white'
-                  : 'border-border text-fg'
-              "
-              dir="ltr"
-              data-numeric
-              >{{ t }}</span
-            >
-          </div>
-
-          <span
-            class="mt-3 rounded-[8px] py-2 text-center text-[11px] font-bold transition-colors duration-300"
-            :class="stage >= 1 ? 'bg-primary text-white' : 'bg-surface-sunken text-fg-faint'"
-            :style="stage === 1 ? 'transform: scale(.97)' : ''"
-            >تأكيد الحجز</span
-          >
-
-          <!-- booked -->
-          <Transition name="screen">
-            <div
-              v-if="stage >= 2"
-              class="bg-surface absolute inset-0 flex flex-col items-center justify-center px-4 text-center"
-            >
-              <span
-                class="bg-success-600 mb-3 grid h-12 w-12 place-items-center rounded-full text-white"
-              >
-                <Check class="h-6 w-6" stroke-width="3" />
+      <div class="flex flex-col items-center gap-2">
+        <PhoneFrame class="phone mx-auto" time="7:42">
+          <div class="flex h-full flex-col px-3.5 pt-2 pb-3.5">
+            <div class="border-border mb-3 flex items-center gap-2 border-b pb-2.5">
+              <span class="bg-ink grid h-7 w-7 place-items-center rounded-[7px] text-white">
+                <Stethoscope class="h-3.5 w-3.5" />
               </span>
-              <p class="text-fg mb-1 text-[13px] font-bold">تم حجز موعدك</p>
-              <p class="text-fg-subtle mb-3 text-[10px]">الأحد 11:00 ص مع د. سارة</p>
+              <div class="min-w-0">
+                <p class="text-fg truncate text-[11px] font-bold">عيادات النخبة</p>
+                <p class="text-fg-faint text-[9px]" dir="ltr">waeda.app/nokhba</p>
+              </div>
+            </div>
+
+            <p class="text-fg-subtle mb-1.5 text-[9px] font-semibold">الخدمة</p>
+            <div
+              class="border-primary bg-primary-soft mb-3 flex items-center justify-between rounded-[8px] border px-2.5 py-2"
+            >
+              <span class="text-fg text-[10px] font-bold">كشف عام</span>
+              <span class="text-fg-subtle text-[9px]" data-numeric>20 د · 150 ر.س</span>
+            </div>
+
+            <p class="text-fg-subtle mb-1.5 text-[9px] font-semibold">غداً، الأحد 12 أكتوبر</p>
+            <div class="mb-auto grid grid-cols-3 gap-1.5">
               <span
-                class="border-border text-fg rounded-full border px-2.5 py-1 text-[9px] font-semibold"
+                v-for="t in TIMES"
+                :key="t"
+                class="rounded-[6px] border py-1.5 text-center text-[10px] font-semibold transition-colors duration-300"
+                :class="
+                  t === '11:00' && stage >= 1
+                    ? 'border-primary bg-primary text-white'
+                    : 'border-border text-fg'
+                "
                 dir="ltr"
-                >W-2041</span
+                data-numeric
+                >{{ t }}</span
               >
             </div>
-          </Transition>
-        </div>
-      </PhoneFrame>
+
+            <span
+              class="mt-3 rounded-[8px] py-2 text-center text-[11px] font-bold transition-colors duration-300"
+              :class="stage >= 1 ? 'bg-primary text-white' : 'bg-surface-sunken text-fg-faint'"
+              :style="stage === 1 ? 'transform: scale(.97)' : ''"
+              >تأكيد الحجز</span
+            >
+
+            <!-- booked -->
+            <Transition name="screen">
+              <div
+                v-if="stage >= 2"
+                class="bg-surface absolute inset-0 flex flex-col items-center justify-center px-4 text-center"
+              >
+                <span
+                  class="bg-success-600 mb-3 grid h-12 w-12 place-items-center rounded-full text-white"
+                >
+                  <Check class="h-6 w-6" stroke-width="3" />
+                </span>
+                <p class="text-fg mb-1 text-[13px] font-bold">تم حجز موعدك</p>
+                <p class="text-fg-subtle mb-3 text-[10px]">الأحد 11:00 ص مع د. سارة</p>
+                <span
+                  class="border-border text-fg rounded-full border px-2.5 py-1 text-[9px] font-semibold"
+                  dir="ltr"
+                  >W-2041</span
+                >
+              </div>
+            </Transition>
+          </div>
+        </PhoneFrame>
+        <p class="text-fg-subtle text-center text-xs lg:hidden">{{ STEPS[0] }}</p>
+      </div>
 
       <!-- line 1 -->
       <div class="relative hidden h-px lg:block">
@@ -185,47 +220,50 @@ const stepOf = (s) => (s < 3 ? 0 : s < 4 ? 1 : 2)
       </div>
 
       <!-- 3 · the reminder, the day before -->
-      <PhoneFrame class="phone mx-auto" time="7:00">
-        <div class="flex h-full flex-col">
-          <div class="border-border flex items-center gap-2 border-b px-3.5 pt-1 pb-2.5">
-            <span class="bg-ink grid h-7 w-7 place-items-center rounded-full text-white">
-              <Stethoscope class="h-3.5 w-3.5" />
-            </span>
-            <div>
-              <p class="text-fg text-[11px] font-bold">عيادات النخبة</p>
-              <p class="text-fg-faint text-[9px]">{{ stage === 5 ? 'يكتب…' : 'واتساب' }}</p>
+      <div class="flex flex-col items-center gap-2">
+        <PhoneFrame class="phone mx-auto" time="7:00">
+          <div class="flex h-full flex-col">
+            <div class="border-border flex items-center gap-2 border-b px-3.5 pt-1 pb-2.5">
+              <span class="bg-ink grid h-7 w-7 place-items-center rounded-full text-white">
+                <Stethoscope class="h-3.5 w-3.5" />
+              </span>
+              <div>
+                <p class="text-fg text-[11px] font-bold">عيادات النخبة</p>
+                <p class="text-fg-faint text-[9px]">{{ stage === 5 ? 'يكتب…' : 'واتساب' }}</p>
+              </div>
+            </div>
+            <div class="bg-surface-sunken flex-1 space-y-2 px-3 py-3">
+              <p class="text-fg-faint text-center text-[9px]">السبت</p>
+              <Transition name="bubble">
+                <div
+                  v-if="stage >= 4"
+                  class="bg-surface text-fg me-5 rounded-[12px] rounded-ss-[4px] px-2.5 py-2 text-[10px] leading-relaxed shadow-sm"
+                >
+                  مرحباً نورة، نذكّرك بموعدك غداً الساعة 11:00 ص مع د. سارة. للتأكيد أرسلي 1،
+                  وللإلغاء 2.
+                </div>
+              </Transition>
+              <Transition name="bubble">
+                <div
+                  v-if="stage >= 5"
+                  class="bg-primary ms-auto flex w-fit items-center gap-1 rounded-[12px] rounded-se-[4px] px-3 py-1.5 text-[11px] font-bold text-white"
+                >
+                  1 <CheckCheck class="h-3 w-3 opacity-80" />
+                </div>
+              </Transition>
+              <Transition name="bubble">
+                <div
+                  v-if="stage >= 6"
+                  class="bg-surface text-fg me-5 rounded-[12px] rounded-ss-[4px] px-2.5 py-2 text-[10px] leading-relaxed shadow-sm"
+                >
+                  تم تأكيد موعدك. نراك غداً.
+                </div>
+              </Transition>
             </div>
           </div>
-          <div class="bg-surface-sunken flex-1 space-y-2 px-3 py-3">
-            <p class="text-fg-faint text-center text-[9px]">السبت</p>
-            <Transition name="bubble">
-              <div
-                v-if="stage >= 4"
-                class="bg-surface text-fg me-5 rounded-[12px] rounded-ss-[4px] px-2.5 py-2 text-[10px] leading-relaxed shadow-sm"
-              >
-                مرحباً نورة، نذكّرك بموعدك غداً الساعة 11:00 ص مع د. سارة. للتأكيد أرسلي 1، وللإلغاء
-                2.
-              </div>
-            </Transition>
-            <Transition name="bubble">
-              <div
-                v-if="stage >= 5"
-                class="bg-primary ms-auto flex w-fit items-center gap-1 rounded-[12px] rounded-se-[4px] px-3 py-1.5 text-[11px] font-bold text-white"
-              >
-                1 <CheckCheck class="h-3 w-3 opacity-80" />
-              </div>
-            </Transition>
-            <Transition name="bubble">
-              <div
-                v-if="stage >= 6"
-                class="bg-surface text-fg me-5 rounded-[12px] rounded-ss-[4px] px-2.5 py-2 text-[10px] leading-relaxed shadow-sm"
-              >
-                تم تأكيد موعدك. نراك غداً.
-              </div>
-            </Transition>
-          </div>
-        </div>
-      </PhoneFrame>
+        </PhoneFrame>
+        <p class="text-fg-subtle text-center text-xs lg:hidden">{{ STEPS[2] }}</p>
+      </div>
     </div>
 
     <!-- steps -->
@@ -254,9 +292,11 @@ const stepOf = (s) => (s < 3 ? 0 : s < 4 ? 1 : 2)
   height: 25rem;
 }
 @media (max-width: 639px) {
+  /* Two phones side by side must fit a 360px screen with its gutters. */
   .phone {
-    width: 10.5rem;
-    height: 21rem;
+    width: min(10.5rem, 41vw);
+    height: auto;
+    aspect-ratio: 1 / 2;
     font-size: 90%;
   }
 }

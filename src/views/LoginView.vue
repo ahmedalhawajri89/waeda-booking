@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, Check, Clock, Eye, EyeOff, Loader2, Lock, Mail, Search } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
@@ -62,6 +62,12 @@ function demo() {
   password.value = 'demo1234'
   signIn()
 }
+
+// «شاهد لوحة التحكم» on the landing page: straight into the demo, rather than
+// a login form to read before finding the demo button on it.
+onMounted(() => {
+  if (route.query.demo === '1') demo()
+})
 
 /* a customer looking for their booking */
 const reference = ref('')

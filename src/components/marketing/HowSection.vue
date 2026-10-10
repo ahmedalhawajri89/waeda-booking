@@ -9,7 +9,7 @@ import { Check, Clock, Copy, MessageCircle } from 'lucide-vue-next'
 </script>
 
 <template>
-  <section id="how-it-works" class="section bg-canvas">
+  <section id="how-it-works" class="section bg-surface">
     <div class="section-inner">
       <header class="mb-12 max-w-2xl md:mb-16">
         <h2 v-reveal class="type-h1 text-fg mb-4">تبدأ في نفس اليوم</h2>

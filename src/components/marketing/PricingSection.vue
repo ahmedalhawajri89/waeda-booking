@@ -3,6 +3,9 @@ import { computed, ref } from 'vue'
 import { Check, Minus } from 'lucide-vue-next'
 import SectionHeading from './SectionHeading.vue'
 import { MESSAGE_PACK, PLANS as PLAN_DATA, TRIAL_DAYS, YEARLY_MONTHS } from '@/data/plans'
+import { NUMBER_LOCALE } from '@/lib/format'
+
+const count = new Intl.NumberFormat(NUMBER_LOCALE)
 
 /**
  * A comparison table, not three cards.
@@ -33,8 +36,8 @@ const PLANS = PLAN_DATA.map((p) => ({
  */
 const FEATURES = [
   { label: 'حجوزات بلا حد، وصفحة حجز بلا حساب للعميل', included: [true, true, true] },
-  { label: 'من الفريق', included: PLAN_DATA.map((p) => `${p.staff}`) },
-  { label: 'رسائل واتساب شهرياً', included: PLAN_DATA.map((p) => p.messages.toLocaleString('en')) },
+  { label: 'عدد الموظفين', included: PLAN_DATA.map((p) => `${p.staff}`) },
+  { label: 'رسائل واتساب شهرياً', included: PLAN_DATA.map((p) => count.format(p.messages)) },
   { label: 'مساعد الحضور: تذكير وتأكيد', included: [true, true, true] },
   { label: 'صندوق محادثات العملاء', included: [true, true, true] },
   { label: 'إعادة ملء المواعيد الملغاة', included: PLAN_DATA.map((p) => p.features.refill) },
@@ -45,6 +48,9 @@ const FEATURES = [
   },
 ]
 
+/** What a year is actually charged, said beside the per-month figure. */
+const yearlyTotal = (p) => `${count.format(p.monthly * YEARLY_MONTHS)} ر.س تُدفع سنوياً`
+
 // Yearly is ten months for twelve; shown as what it comes to per month.
 const price = computed(() => (p) => {
   if (p.monthly === 0) return 'مجاناً'
@@ -53,7 +59,7 @@ const price = computed(() => (p) => {
 </script>
 
 <template>
-  <section id="pricing" class="section bg-canvas">
+  <section id="pricing" class="section bg-surface">
     <div class="section-inner">
       <SectionHeading
         title="ابدأ مجاناً، وادفع حين يكبر نشاطك"
@@ -62,27 +68,37 @@ const price = computed(() => (p) => {
 
       <!-- billing toggle -->
       <div v-reveal class="mb-10 flex items-center justify-center gap-3">
-        <span class="text-sm font-semibold" :class="!yearly ? 'text-fg' : 'text-fg-subtle'">
+        <button
+          type="button"
+          class="px-1 py-2 text-sm font-semibold"
+          :class="!yearly ? 'text-fg' : 'text-fg-subtle'"
+          @click="yearly = false"
+        >
           شهري
-        </span>
+        </button>
         <button
           type="button"
           role="switch"
           :aria-checked="yearly"
           aria-label="التبديل بين الدفع الشهري والسنوي"
-          class="relative h-7 shrink-0 rounded-full border transition-colors"
+          class="relative h-8 shrink-0 rounded-full border transition-colors"
           :class="yearly ? 'bg-primary border-primary' : 'border-border bg-surface-sunken'"
-          style="width: 3.25rem"
+          style="width: 3.75rem"
           @click="yearly = !yearly"
         >
           <span
-            class="bg-surface absolute top-0.5 h-5 w-5 rounded-full shadow transition-all duration-300"
-            :style="{ insetInlineStart: yearly ? 'calc(100% - 1.375rem)' : '0.125rem' }"
+            class="bg-surface absolute top-0.5 h-6 w-6 rounded-full shadow transition-all duration-300"
+            :style="{ insetInlineStart: yearly ? 'calc(100% - 1.625rem)' : '0.125rem' }"
           />
         </button>
-        <span class="text-sm font-semibold" :class="yearly ? 'text-fg' : 'text-fg-subtle'">
+        <button
+          type="button"
+          class="px-1 py-2 text-sm font-semibold"
+          :class="yearly ? 'text-fg' : 'text-fg-subtle'"
+          @click="yearly = true"
+        >
           سنوي
-        </span>
+        </button>
         <span class="bg-success-50 text-success-700 rounded-full px-2 py-0.5 text-[11px] font-bold">
           شهران مجاناً
         </span>
@@ -101,7 +117,7 @@ const price = computed(() => (p) => {
                 v-for="p in PLANS"
                 :key="p.name"
                 scope="col"
-                class="bg-canvas sticky top-16 z-10 px-4 pb-5 align-bottom"
+                class="bg-surface sticky top-16 z-10 px-4 pb-5 align-bottom"
               >
                 <div
                   class="rounded-[var(--radius-lg)] border p-4 text-center"
@@ -112,7 +128,7 @@ const price = computed(() => (p) => {
                   "
                 >
                   <p v-if="p.featured" class="text-primary-fg mb-1 text-[11px] font-bold">
-                    الأكثر اختياراً
+                    نوصي بها
                   </p>
                   <p class="type-h3 text-fg">{{ p.name }}</p>
                   <p class="text-fg-subtle mt-0.5 text-[12px]">{{ p.tagline }}</p>
@@ -123,8 +139,12 @@ const price = computed(() => (p) => {
                     <span v-if="p.monthly > 0" class="text-fg-subtle text-[12px]">/ شهرياً</span>
                   </p>
 
-                  <p v-if="yearly && p.monthly > 0" class="text-fg-subtle mt-0.5 text-[11px]">
-                    يُدفع سنوياً
+                  <p
+                    v-if="yearly && p.monthly > 0"
+                    class="text-fg-subtle mt-0.5 text-xs"
+                    data-numeric
+                  >
+                    {{ yearlyTotal(p) }}
                   </p>
                   <RouterLink
                     to="/register"
@@ -181,9 +201,7 @@ const price = computed(() => (p) => {
               : 'border-border bg-surface'
           "
         >
-          <p v-if="p.featured" class="text-primary-fg mb-1 text-[11px] font-bold">
-            الأكثر اختياراً
-          </p>
+          <p v-if="p.featured" class="text-primary-fg mb-1 text-[11px] font-bold">نوصي بها</p>
           <h3 class="type-h3 text-fg">{{ p.name }}</h3>
           <p class="text-fg-subtle mt-0.5 text-[13px]">{{ p.tagline }}</p>
           <p class="mt-4 flex items-baseline gap-1.5">
@@ -193,8 +211,8 @@ const price = computed(() => (p) => {
             <span v-if="p.monthly > 0" class="text-fg-subtle text-[13px]">/ شهرياً</span>
           </p>
 
-          <p v-if="yearly && p.monthly > 0" class="text-fg-subtle mt-0.5 text-[11px]">
-            يُدفع سنوياً
+          <p v-if="yearly && p.monthly > 0" class="text-fg-subtle mt-0.5 text-xs" data-numeric>
+            {{ yearlyTotal(p) }}
           </p>
           <RouterLink
             to="/register"

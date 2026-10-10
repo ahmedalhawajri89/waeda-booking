@@ -1,6 +1,8 @@
 <script setup>
 import { computed, ref } from 'vue'
+import { Minus, Plus } from 'lucide-vue-next'
 import { NUMBER_LOCALE } from '@/lib/format'
+import { planByKey, TRIAL_DAYS, TRIAL_PLAN } from '@/data/plans'
 
 /**
  * What no-shows cost, in the owner's own numbers.
@@ -25,6 +27,13 @@ const backPerYear = computed(() => backPerMonth.value * 12)
 
 const n = new Intl.NumberFormat(NUMBER_LOCALE, { maximumFractionDigits: 0 })
 const fmt = (v) => n.format(v)
+
+/** One step up or down, for an exact value a slider is too coarse to hit on a phone. */
+function nudge(f, dir) {
+  f.model.value = Math.min(f.max, Math.max(f.min, f.model.value + dir * f.step))
+}
+
+const trial = `جرّب ${planByKey(TRIAL_PLAN).name} ${TRIAL_DAYS} يوماً`
 
 const INPUTS = [
   { model: perWeek, label: 'مواعيدك في الأسبوع', min: 5, max: 400, step: 5, unit: 'موعد' },
@@ -57,18 +66,39 @@ const INPUTS = [
         class="border-border grid overflow-hidden rounded-[var(--radius-xl)] border lg:grid-cols-[1.2fr_1fr]"
       >
         <div class="bg-surface space-y-7 p-6 sm:p-8">
-          <div v-for="f in INPUTS" :key="f.label">
-            <div class="mb-2.5 flex items-baseline justify-between gap-4">
-              <label :for="`calc-${f.label}`" class="text-fg text-[15px] font-semibold">{{
+          <div v-for="(f, i) in INPUTS" :key="f.label">
+            <div class="mb-2.5 flex items-center justify-between gap-4">
+              <label :for="`calc-${i}`" class="text-fg text-[15px] font-semibold">{{
                 f.label
               }}</label>
-              <span class="text-fg shrink-0 text-lg font-bold" data-numeric>
-                {{ fmt(f.model.value) }}
-                <span class="text-fg-subtle text-sm font-medium">{{ f.unit }}</span>
-              </span>
+              <div class="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  class="border-border text-fg-muted hover:text-fg grid h-10 w-10 place-items-center rounded-[var(--radius-md)] border disabled:opacity-40"
+                  :aria-label="`أقل: ${f.label}`"
+                  :disabled="f.model.value <= f.min"
+                  @click="nudge(f, -1)"
+                >
+                  <Minus class="h-4 w-4" aria-hidden="true" />
+                </button>
+                <span class="text-fg min-w-[4.5rem] text-center text-lg font-bold" data-numeric>
+                  {{ fmt(f.model.value) }}
+                  <span class="text-fg-subtle text-sm font-medium">{{ f.unit }}</span>
+                </span>
+                <button
+                  type="button"
+                  class="border-border text-fg-muted hover:text-fg grid h-10 w-10 place-items-center rounded-[var(--radius-md)] border disabled:opacity-40"
+                  :aria-label="`أكثر: ${f.label}`"
+                  :disabled="f.model.value >= f.max"
+                  @click="nudge(f, 1)"
+                >
+                  <Plus class="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
             </div>
             <input
-              :id="`calc-${f.label}`"
+              :id="`calc-${i}`"
+              :aria-valuetext="`${fmt(f.model.value)} ${f.unit}`"
               v-model.number="f.model.value"
               type="range"
               :min="f.min"
@@ -83,7 +113,6 @@ const INPUTS = [
 
         <div
           class="bg-surface-sunken border-border flex flex-col justify-center gap-6 border-t p-6 sm:p-8 lg:border-s lg:border-t-0"
-          aria-live="polite"
         >
           <div>
             <p class="text-fg-subtle mb-1 text-sm">مواعيد تضيع كل شهر</p>
@@ -98,7 +127,9 @@ const INPUTS = [
               {{ fmt(lostPerMonth) }} <span class="text-fg-subtle text-base font-medium">ر.س</span>
             </p>
           </div>
-          <div class="border-border border-t pt-6">
+          <!-- Only the bottom line is announced: the whole panel, live, read out
+               every step of a slider being dragged. -->
+          <div class="border-border border-t pt-6" aria-live="polite" aria-atomic="true">
             <p class="text-fg-subtle mb-1 text-sm">ما يمكن استرداده بحسب افتراضك</p>
             <p class="text-primary-fg font-display text-4xl font-bold" data-numeric>
               {{ fmt(backPerMonth) }} <span class="text-base font-medium">ر.س شهرياً</span>
@@ -107,6 +138,12 @@ const INPUTS = [
               أي {{ fmt(backPerYear) }} ر.س في السنة.
             </p>
           </div>
+          <RouterLink
+            to="/register"
+            class="btn-brand inline-flex items-center justify-center rounded-[var(--radius-md)] px-5 py-3 text-sm font-bold"
+          >
+            {{ trial }}
+          </RouterLink>
         </div>
       </div>
     </div>
@@ -134,16 +171,16 @@ html[dir='ltr'] .range {
 }
 .range::-webkit-slider-thumb {
   appearance: none;
-  width: 20px;
-  height: 20px;
+  width: 28px;
+  height: 28px;
   border-radius: 999px;
   background: var(--color-surface);
   border: 2px solid var(--color-fg);
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.15);
 }
 .range::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
   border-radius: 999px;
   background: var(--color-surface);
   border: 2px solid var(--color-fg);

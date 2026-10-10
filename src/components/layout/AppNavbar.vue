@@ -16,6 +16,7 @@ const LINKS = [
   { id: 'how-it-works', label: 'كيف يعمل' },
   { id: 'calculator', label: 'حاسبة الغياب' },
   { id: 'pricing', label: 'الأسعار' },
+  { id: 'faq', label: 'الأسئلة' },
 ]
 
 const open = ref(false)
@@ -29,6 +30,15 @@ watch(
   () => (open.value = false),
 )
 
+/** The phone menu closes on Escape and on a tap outside the bar, like any menu. */
+const nav = ref(null)
+function onKeydown(e) {
+  if (e.key === 'Escape' && open.value) open.value = false
+}
+function onPointer(e) {
+  if (open.value && nav.value && !nav.value.contains(e.target)) open.value = false
+}
+
 function onScroll() {
   scrolled.value = window.scrollY > 8
 }
@@ -37,6 +47,8 @@ let observer
 onMounted(() => {
   onScroll()
   window.addEventListener('scroll', onScroll, { passive: true })
+  document.addEventListener('keydown', onKeydown)
+  document.addEventListener('pointerdown', onPointer)
 
   // A section counts as "current" while it crosses the band just under the bar.
   observer = new IntersectionObserver(
@@ -55,13 +67,16 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   window.removeEventListener('scroll', onScroll)
+  document.removeEventListener('keydown', onKeydown)
+  document.removeEventListener('pointerdown', onPointer)
   observer?.disconnect()
 })
 </script>
 
 <template>
   <nav
-    class="bg-canvas/85 sticky top-0 z-50 w-full border-b backdrop-blur-xl transition-[border-color,box-shadow] duration-200"
+    ref="nav"
+    class="bg-surface/90 sticky top-0 z-50 w-full border-b backdrop-blur-xl transition-[border-color,box-shadow] duration-200"
     :class="scrolled || open ? 'border-border elev-raised' : 'border-transparent'"
     aria-label="الرئيسية"
   >

@@ -5,7 +5,7 @@ import { ArrowLeft } from 'lucide-vue-next'
 </script>
 
 <template>
-  <section class="section bg-canvas border-border border-t">
+  <section class="section bg-surface">
     <div class="section-inner text-center">
       <h2 v-reveal class="type-h1 text-fg mx-auto mb-4 max-w-2xl">
         جدول ممتلئ، ومواعيد يحضرها أصحابها.
@@ -25,7 +25,7 @@ import { ArrowLeft } from 'lucide-vue-next'
           />
         </RouterLink>
         <RouterLink
-          to="/login"
+          to="/login?demo=1"
           class="border-border-strong bg-surface text-fg hover:bg-surface-hover inline-flex w-full items-center justify-center rounded-[var(--radius-md)] border px-6 py-3.5 text-base font-bold transition-colors sm:w-auto"
         >
           شاهد لوحة التحكم

@@ -35,13 +35,13 @@ const ROWS = [
 </script>
 
 <template>
-  <section id="problem" class="section bg-canvas">
+  <section id="problem" class="section bg-surface">
     <div class="section-inner">
       <header class="mb-12 max-w-2xl md:mb-16">
         <h2 v-reveal class="type-h1 text-fg mb-4">المواعيد تضيع في التفاصيل الصغيرة</h2>
         <p v-reveal="60" class="type-lede">
-          أغلب المنشآت تدير حجوزاتها بين الواتساب والمكالمات ودفتر على الطاولة. هذا ما يحدث في يوم
-          عادي، وما يتغير مع وعدة.
+          كثير من المنشآت تدير حجوزاتها بين الواتساب والمكالمات ودفتر على الطاولة. هذا ما يحدث في
+          يوم عادي، وما يتغير مع وعدة.
         </p>
       </header>
 

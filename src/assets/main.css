@@ -455,7 +455,12 @@ html[dir='rtl'] .skeleton::after {
 
   /* --- section rhythm --------------------------------------------------- */
   .section {
-    @apply relative px-4 py-24 sm:px-6 md:py-32 lg:px-8;
+    @apply relative px-4 py-16 sm:px-6 sm:py-24 md:py-32 lg:px-8;
+  }
+  /* Sections are all white, told apart by a hairline: the white / #fafaf9
+     alternation it replaces was too faint to separate anything. */
+  .section + .section {
+    @apply border-border border-t;
   }
   .section-inner {
     @apply mx-auto max-w-6xl;

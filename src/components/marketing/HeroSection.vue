@@ -1,6 +1,15 @@
 <script setup>
 import { ArrowLeft } from 'lucide-vue-next'
 import HeroFlow from './hero/HeroFlow.vue'
+import { planByKey, TRIAL_DAYS, TRIAL_PLAN } from '@/data/plans'
+
+/** What starting costs, answered on the first screen and read from the plans. */
+const free = planByKey('free')
+const terms = [
+  free.staff === 1 ? 'مجاناً لموظف واحد' : `مجاناً حتى ${free.staff} موظفين`,
+  `تجربة ${planByKey(TRIAL_PLAN).name} ${TRIAL_DAYS} يوماً`,
+  'بلا بطاقة دفع',
+].join(' · ')
 
 /**
  * First screen. Two lines say what the business gets; below them the whole
@@ -51,6 +60,7 @@ import HeroFlow from './hero/HeroFlow.vue'
             جرّب صفحة الحجز
           </RouterLink>
         </div>
+        <p class="rise text-fg-subtle mt-4 text-center text-sm" style="--i: 4">{{ terms }}</p>
       </div>
 
       <div class="rise" style="--i: 5">

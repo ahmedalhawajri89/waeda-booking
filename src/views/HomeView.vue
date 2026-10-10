@@ -15,12 +15,12 @@ import FinalCta from '@/components/marketing/FinalCta.vue'
  * what it does (hero) → is this my problem (problem) → is it for my kind of
  * business (sectors) → how hard is it (how) → is it worth it (calculator) →
  * what does it cost (pricing) → my remaining doubts (faq) → start.
- * Backgrounds alternate surface / canvas so each section reads as its own.
+ * Every section is white; a hairline between them (main.css .section) tells them apart.
  */
 </script>
 
 <template>
-  <div class="bg-canvas min-h-screen">
+  <div class="bg-surface min-h-screen">
     <AppNavbar />
 
     <main>
