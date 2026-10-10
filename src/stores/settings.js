@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { repository } from '@/data/repository'
+import { currentPublicOrg } from '@/data/api/client'
 import {
   applyCatalog,
   businessHours,
@@ -24,6 +25,14 @@ export const useSettingsStore = defineStore('settings', () => {
   const isLoading = ref(false)
   const error = ref(null)
   const loaded = ref(false)
+  /**
+   * Whose catalog the arrays hold: a guest page's business (its slug) or the
+   * console's own (''). A booking page for another business loads that one
+   * into the same arrays, so the console must reload rather than trust
+   * `loaded` — and must never save what it did not load for itself.
+   */
+  const loadedFor = ref(null)
+  const scope = () => currentPublicOrg() ?? ''
 
   /** @returns {import('@/data/catalog').CatalogSnapshot} */
   function snapshot() {
@@ -68,7 +77,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const iconKeyOf = (serviceId) => iconKeys.value[serviceId] ?? 'Sparkles'
 
   async function load(force = false) {
-    if (loaded.value && !force) return
+    const wanted = scope()
+    if (loaded.value && !force && loadedFor.value === wanted) return
     isLoading.value = true
     error.value = null
     try {
@@ -76,6 +86,7 @@ export const useSettingsStore = defineStore('settings', () => {
       iconKeys.value = Object.fromEntries(snap.services.map((s) => [s.id, s.iconKey]))
       applyCatalog(snap)
       loaded.value = true
+      loadedFor.value = wanted
     } catch {
       error.value = 'تعذّر تحميل الإعدادات. تحقّق من الاتصال ثم أعد المحاولة.'
     } finally {
@@ -83,10 +94,23 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
-  function persist() {
-    repository.saveCatalog(snapshot()).catch(() => {
-      error.value = 'تعذّر حفظ الإعدادات.'
+  /**
+   * The one way a catalog is written back — refused unless what is loaded is
+   * the console's own, so another business's services can never be saved
+   * over this one's.
+   */
+  function write(snap, failure) {
+    if (loadedFor.value !== '' || scope() !== '') {
+      error.value = 'تغيّرت الصفحة قبل الحفظ. أعد تحميل الإعدادات ثم حاول مرة أخرى.'
+      return
+    }
+    repository.saveCatalog(snap).catch(() => {
+      error.value = failure
     })
+  }
+
+  function persist() {
+    write(snapshot(), 'تعذّر حفظ الإعدادات.')
   }
 
   /* --------------------------------------------------------------- services */
@@ -101,9 +125,7 @@ export const useSettingsStore = defineStore('settings', () => {
     applyCatalog(next)
     // Reported like every other settings save — this one used to be the only
     // write whose failure vanished.
-    repository.saveCatalog(next).catch(() => {
-      error.value = 'تعذّر حفظ الخدمة.'
-    })
+    write(next, 'تعذّر حفظ الخدمة.')
   }
 
   /** @returns {import('@/data/catalog').ServiceRow} */
@@ -203,6 +225,7 @@ export const useSettingsStore = defineStore('settings', () => {
     iconKeys.value = {}
     error.value = null
     loaded.value = false
+    loadedFor.value = null
   }
 
   return {

@@ -41,6 +41,11 @@ export function setPublicOrg(slug) {
   publicOrg = slug || null
 }
 
+/** The business the current page names, or null on the console. */
+export function currentPublicOrg() {
+  return publicOrg
+}
+
 /** Thrown for any non-2xx response, carrying the status so callers can branch. */
 export class ApiError extends Error {
   constructor(status, body) {
