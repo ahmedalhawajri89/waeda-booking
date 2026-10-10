@@ -34,6 +34,7 @@ import { useGuestBusiness } from '@/composables/useGuestBusiness'
 import { inZone, nowInZone } from '@/lib/zone'
 import { usePhoneCode } from '@/composables/usePhoneCode'
 import CodeInput from '@/components/booking/CodeInput.vue'
+import DemoCode from '@/components/booking/DemoCode.vue'
 import {
   groupByPeriod,
   SEARCH_DAYS,
@@ -43,6 +44,7 @@ import { canChange, CHANGE_CUTOFF_MIN } from '@/lib/bookingPolicy'
 import { fromNow, fullDate, relativeDayTime, time } from '@/lib/format'
 import { buildIcs, downloadIcs } from '@/lib/ics'
 import { rememberGuest, rememberedGuest, samePhone } from '@/lib/guestIdentity'
+import { digitsOnly, toLatinDigits } from '@/lib/digits'
 
 /**
  * The customer's own booking: see it, keep it, move it, or let it go.
@@ -61,9 +63,16 @@ const customers = useCustomersStore()
 const settings = useSettingsStore()
 const { slug, bookPath, managePath } = useGuestBusiness()
 const avail = useGuestAvailability()
+const busyState = avail.busyState
 
 const reference = computed(() => String(route.params.reference ?? ''))
 const phone = ref('')
+// Arabic-keyboard digits become Latin as they are typed: what the page
+// shows is what the server stores.
+watch(phone, (v) => {
+  const latin = toLatinDigits(v)
+  if (latin !== v) phone.value = latin
+})
 const verified = ref(false)
 const attempted = ref(false)
 const checking = ref(false)
@@ -111,8 +120,8 @@ const changeable = computed(() => canChange(view.value))
 
 /* ---------------------------------------------------------- ownership */
 function phoneMatches(entered) {
-  const digits = entered.replace(/\D/g, '')
-  const stored = (view.value?.phone ?? '').replace(/\D/g, '')
+  const digits = digitsOnly(entered)
+  const stored = digitsOnly(view.value?.phone)
   return digits.length >= 9 && stored.endsWith(digits.slice(-9))
 }
 
@@ -434,6 +443,7 @@ function moveInstead() {
             أدخل الرمز المرسل إلى <span dir="ltr">{{ phone }}</span>
           </p>
           <CodeInput ref="codeBox" :invalid="codeError" @complete="onCode" />
+          <DemoCode v-if="code.shown.value" :code="code.shown.value" />
           <p v-if="codeError" class="text-danger-700 text-sm" role="alert">
             الرمز غير صحيح. حاول مرة أخرى.
           </p>
@@ -568,8 +578,35 @@ function moveInstead() {
             <DayPicker v-model="newDate" :free-on="freeCount" :weeks="4" />
 
             <div>
+              <!-- Until the taken times are known every time would look free. -->
+              <div
+                v-if="busyState === 'loading'"
+                class="grid grid-cols-3 gap-2 sm:grid-cols-4"
+                aria-busy="true"
+                aria-label="جاري تحميل الأوقات"
+              >
+                <span
+                  v-for="n in 8"
+                  :key="n"
+                  class="bg-surface-sunken h-11 animate-pulse rounded-[var(--radius-md)]"
+                />
+              </div>
+              <div
+                v-else-if="busyState === 'failed'"
+                role="alert"
+                class="border-warning-100 bg-warning-50 text-warning-700 rounded-[var(--radius-md)] border px-4 py-4 text-center text-sm"
+              >
+                تعذّر التحقق من الأوقات المحجوزة، فلم نعرضها حتى لا تختار وقتاً محجوزاً.
+                <button
+                  type="button"
+                  class="font-semibold underline"
+                  @click="avail.loadBusy(query.resources)"
+                >
+                  إعادة المحاولة
+                </button>
+              </div>
               <p
-                v-if="!slots.length"
+                v-else-if="!slots.length"
                 class="bg-surface-sunken text-fg-subtle rounded-[var(--radius-md)] px-4 py-6 text-center text-sm"
               >
                 لا أوقات متاحة في هذا اليوم. اختر يوماً آخر.

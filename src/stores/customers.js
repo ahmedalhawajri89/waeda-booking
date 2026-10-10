@@ -1,10 +1,11 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { repository } from '@/data/repository'
+import { digitsOnly } from '@/lib/digits'
 
 /** Digits only, so "٠٥٠ ١٢٣ ٤٥٦٧", "050-123-4567" and "0501234567" all match. */
 function normalisePhone(phone) {
-  return phone.replace(/\D/g, '')
+  return digitsOnly(phone)
 }
 
 export const useCustomersStore = defineStore('customers', () => {

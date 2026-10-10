@@ -5,10 +5,12 @@ import { BellRing, Phone, User } from 'lucide-vue-next'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import CodeInput from '@/components/booking/CodeInput.vue'
+import DemoCode from '@/components/booking/DemoCode.vue'
 import { isDemoBackend, repository } from '@/data/repository'
 import { usePhoneCode } from '@/composables/usePhoneCode'
 import { dayLabel } from '@/lib/format'
 import { rememberGuest, rememberedGuest, samePhone } from '@/lib/guestIdentity'
+import { digitsOnly, toLatinDigits } from '@/lib/digits'
 
 /**
  * "Tell me if a time frees up." Offered on the booking page — open when the
@@ -32,6 +34,12 @@ watch(
 const known = rememberedGuest()
 const name = ref(known?.name ?? '')
 const phone = ref(known?.phone ?? '')
+// Arabic-keyboard digits become Latin as they are typed: what the page
+// shows is what the server stores.
+watch(phone, (v) => {
+  const latin = toLatinDigits(v)
+  if (latin !== v) phone.value = latin
+})
 const part = ref('any')
 const done = ref(false)
 const saving = ref(false)
@@ -45,7 +53,7 @@ const PARTS = [
   { value: 'evening', label: 'المساء', window: [17 * 60, 21 * 60] },
 ]
 
-const phoneOk = computed(() => phone.value.replace(/\D/g, '').length >= 9)
+const phoneOk = computed(() => digitsOnly(phone.value).length >= 9)
 const nameError = computed(() => (touched.value && !name.value.trim() ? 'الاسم مطلوب' : undefined))
 const phoneError = computed(() =>
   touched.value && !phoneOk.value ? 'رقم الجوال غير مكتمل' : undefined,
@@ -141,6 +149,7 @@ async function onCode(entered) {
           أدخل الرمز المرسل إلى <span dir="ltr">{{ phone }}</span>
         </p>
         <CodeInput ref="codeBox" :invalid="codeError" @complete="onCode" />
+        <DemoCode v-if="code.shown.value" :code="code.shown.value" />
         <p v-if="codeError" class="text-danger-700 text-sm" role="alert">
           الرمز غير صحيح. حاول مرة أخرى.
         </p>

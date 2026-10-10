@@ -1,5 +1,6 @@
 <script setup>
 import { nextTick, onMounted, ref } from 'vue'
+import { digitsOnly } from '@/lib/digits'
 
 /**
  * Four boxes for a four-digit code. Typing moves forward, Backspace moves
@@ -21,7 +22,7 @@ function emitIfDone() {
 }
 
 function onInput(e, i) {
-  const v = e.target.value.replace(/\D/g, '')
+  const v = digitsOnly(e.target.value)
   if (v.length > 1) return fill(v)
   digits.value[i] = v
   if (v && i < props.length - 1) boxes.value[i + 1]?.focus()
@@ -45,7 +46,7 @@ function fill(v) {
 
 function onPaste(e) {
   e.preventDefault()
-  fill((e.clipboardData?.getData('text') ?? '').replace(/\D/g, ''))
+  fill(digitsOnly(e.clipboardData?.getData('text')))
 }
 
 function clear() {

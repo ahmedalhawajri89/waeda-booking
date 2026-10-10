@@ -22,6 +22,7 @@ import { useFocusTrap } from '@/composables/useFocusTrap'
 import { relativeDayTime } from '@/lib/format'
 import { BOOKING_STATUS } from '@/lib/status'
 import Kbd from '@/components/ui/Kbd.vue'
+import { digitsOnly } from '@/lib/digits'
 
 /**
  * Ctrl/⌘+K: one box for finding anything and doing anything.
@@ -82,7 +83,7 @@ const actions = computed(() => [
   },
 ])
 
-const digits = (s) => s.replace(/\D/g, '')
+const digits = (s) => digitsOnly(s)
 
 const groups = computed(() => {
   const q = query.value.trim()

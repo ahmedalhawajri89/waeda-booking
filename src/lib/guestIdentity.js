@@ -1,3 +1,5 @@
+import { digitsOnly } from './digits'
+
 /**
  * The guest's identity on this device: no account, no password — a name and a
  * phone number that passed a code once.
@@ -51,4 +53,4 @@ export function forgetGuest() {
 }
 
 /** Digits only, so "050 111 2222" and "0501112222" are the same person. */
-export const samePhone = (a, b) => a.replace(/\D/g, '') === b.replace(/\D/g, '')
+export const samePhone = (a, b) => digitsOnly(a) === digitsOnly(b)

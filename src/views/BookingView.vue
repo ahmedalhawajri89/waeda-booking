@@ -18,6 +18,7 @@ import { toast } from 'vue-sonner'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import DayPicker from '@/components/booking/DayPicker.vue'
 import CodeInput from '@/components/booking/CodeInput.vue'
+import DemoCode from '@/components/booking/DemoCode.vue'
 import WaitlistJoin from '@/components/booking/WaitlistJoin.vue'
 import StoreHeader from '@/components/booking/StoreHeader.vue'
 import BookingTicket from '@/components/booking/BookingTicket.vue'
@@ -26,6 +27,7 @@ import { useCustomersStore } from '@/stores/customers'
 import { useSettingsStore } from '@/stores/settings'
 import { bookableResources, bookableServices, schedule, services } from '@/data/catalog'
 import { durationsOf, priceFor } from '@/lib/pricing'
+import { windowFor } from '@/lib/hours'
 import { isGroup } from '@/lib/sessions'
 import { business, initialOf } from '@/data/business'
 import { isConflict } from '@/data/errors'
@@ -37,6 +39,7 @@ import { groupByPeriod, useGuestAvailability } from '@/composables/useGuestAvail
 import { duration, fullDate, money, time } from '@/lib/format'
 import { buildIcs, downloadIcs } from '@/lib/ics'
 import { forgetGuest, rememberGuest, rememberedGuest, samePhone } from '@/lib/guestIdentity'
+import { digitsOnly, toLatinDigits } from '@/lib/digits'
 
 /**
  * The guest booking page: one page, no account.
@@ -68,12 +71,22 @@ const date = ref(startOfDay(nowInZone()))
 const startAt = ref(null)
 const name = ref('')
 const phone = ref('')
+// Arabic-keyboard digits become Latin as they are typed: what the page
+// shows is what the server stores.
+watch(phone, (v) => {
+  const latin = toLatinDigits(v)
+  if (latin !== v) phone.value = latin
+})
 const notes = ref('')
 const touched = ref(false)
 
 /** 'form' → 'verify' (first time on this phone) → 'done' */
 const stage = ref('form')
 const submitting = ref(false)
+/** The chosen time went to someone else while the guest was finishing: said where the times are, until they pick again. */
+const slotTaken = ref(false)
+/** Booking failed for another reason (offline, server): said beside the button, which retries. */
+const bookError = ref('')
 const reference = ref(null)
 /** The secret in the manage link; the API's only. */
 const manageToken = ref(null)
@@ -150,6 +163,14 @@ const query = computed(() => ({
 const slots = computed(() => avail.slotsOn(date.value, query.value))
 const freeCount = (day) => avail.freeCount(day, query.value)
 const loadBusy = () => avail.loadBusy(allPeople.value)
+const busyState = avail.busyState
+/** Why a day shows no times: closed, its hours already over, or all taken. */
+const emptyDay = computed(() => {
+  const w = windowFor(date.value, schedule)
+  if (!w) return 'لا يوجد دوام في هذا اليوم. اختر يوماً آخر.'
+  if (w.close <= new Date()) return 'انتهت أوقات هذا اليوم. اختر يوماً آخر.'
+  return 'كل الأوقات في هذا اليوم محجوزة. اختر يوماً آخر، أو اطلب أن ننبّهك إذا تفرّغ وقت.'
+})
 const grouped = computed(() => groupByPeriod(slots.value))
 const dayIsFull = computed(
   () => slots.value.length > 0 && !slots.value.some((s) => s.state === 'available'),
@@ -236,7 +257,7 @@ function takeNearest() {
 /* ------------------------------------------------------------- details */
 const phoneError = computed(() => {
   if (!touched.value) return undefined
-  const digits = phone.value.replace(/\D/g, '')
+  const digits = digitsOnly(phone.value)
   if (!digits) return 'رقم الجوال مطلوب'
   if (digits.length < 9) return 'رقم الجوال غير مكتمل'
   return undefined
@@ -246,7 +267,7 @@ const nameError = computed(() => (touched.value && !name.value.trim() ? 'الا�
 const done = computed(() => ({
   service: !!service.value,
   when: !!startAt.value && !!resourceId.value,
-  details: !!name.value.trim() && phone.value.replace(/\D/g, '').length >= 9,
+  details: !!name.value.trim() && digitsOnly(phone.value).length >= 9,
 }))
 const ready = computed(() => done.value.service && done.value.when && done.value.details)
 
@@ -310,6 +331,10 @@ watch(serviceId, async () => {
     date.value = nearest.value.day
 })
 watch([serviceId, who, date, durationMin, startAt, name, phone, notes], saveDraft)
+// A new time chosen: the notice that the last one was taken has done its job.
+watch(startAt, (v) => {
+  if (v) slotTaken.value = false
+})
 
 onMounted(async () => {
   await settings.load(!isDemoBackend && !!slug.value)
@@ -373,9 +398,19 @@ async function confirm() {
   askForCode()
 }
 
-function askForCode() {
+/** Back from the code step to the phone field, to fix a mistyped number. */
+async function editPhone() {
+  stage.value = 'form'
+  await nextTick()
+  scrollTo('details')
+  document.querySelector('#sec-details input[type="tel"]')?.focus({ preventScroll: true })
+}
+
+async function askForCode() {
+  // Only once a code has really gone out: a failed send stays on this screen
+  // (usePhoneCode says why), rather than asking for a code that never came.
+  if (!(await sendCode())) return
   stage.value = 'verify'
-  sendCode()
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
@@ -400,6 +435,7 @@ async function onCode(entered) {
 
 async function book() {
   if (!serviceId.value || !resourceId.value || !startAt.value) return
+  bookError.value = ''
   submitting.value = true
   try {
     if (isDemoBackend) {
@@ -457,17 +493,19 @@ async function book() {
       askForCode()
       return
     }
-    stage.value = 'form'
-    toast.error(
-      e?.status === 409 || isConflict(e)
-        ? 'هذا الوقت حُجز قبل لحظات. اختر وقتاً آخر.'
-        : 'تعذّر إتمام الحجز. حاول مرة أخرى.',
-    )
     if (e?.status === 409 || isConflict(e)) {
+      // The one case that needs a new choice: back to the times, with the
+      // reason left on screen beside them.
+      stage.value = 'form'
       startAt.value = null
+      slotTaken.value = true
       loadBusy()
       nextTick(() => scrollTo('when'))
+      return
     }
+    // Anything else (offline, a server error) keeps the guest where they are,
+    // code and details intact; the button tries again.
+    bookError.value = 'تعذّر إتمام الحجز. تحقّق من الاتصال ثم حاول مرة أخرى.'
   } finally {
     submitting.value = false
   }
@@ -589,6 +627,9 @@ const dayTitle = computed(() =>
         <p class="text-fg-muted mb-6 text-sm">
           أرسلنا رمزاً من 4 أرقام على واتساب إلى
           <span class="text-fg font-semibold" dir="ltr">{{ phone }}</span>
+          <button type="button" class="text-fg ms-1 font-semibold underline" @click="editPhone">
+            تعديل الرقم
+          </button>
         </p>
 
         <CodeInput ref="codeBox" :invalid="codeError" @complete="onCode" />
@@ -596,6 +637,10 @@ const dayTitle = computed(() =>
           الرمز غير صحيح. حاول مرة أخرى.
         </p>
         <p v-if="submitting" class="text-fg-subtle mt-3 text-sm">جاري تأكيد الحجز…</p>
+        <div v-else-if="bookError" role="alert" class="text-danger-700 mt-3 text-sm">
+          {{ bookError }}
+          <button type="button" class="font-semibold underline" @click="book">حاول مرة أخرى</button>
+        </div>
 
         <div class="text-fg-subtle mt-6 text-sm">
           <span v-if="resendIn > 0" data-numeric>إعادة الإرسال بعد {{ resendIn }} ثانية</span>
@@ -603,12 +648,7 @@ const dayTitle = computed(() =>
             أعد إرسال الرمز
           </button>
         </div>
-        <p
-          v-if="code.echoed.value"
-          class="bg-surface-sunken text-fg-subtle mt-6 rounded-[var(--radius-md)] px-3 py-2 text-xs"
-        >
-          نسخة تجريبية: يظهر الرمز في إشعار أعلى الشاشة بدل الواتساب.
-        </p>
+        <DemoCode v-if="code.shown.value" :code="code.shown.value" class="mt-6" />
       </div>
       <p class="text-fg-subtle mt-4 text-center text-xs">
         نتحقق من الرقم مرة واحدة فقط على هذا الجهاز.
@@ -952,10 +992,40 @@ const dayTitle = computed(() =>
                 الأوقات المتاحة {{ dayTitle }}
               </p>
               <p
-                v-if="!slots.length"
+                v-if="slotTaken"
+                role="alert"
+                class="border-warning-100 bg-warning-50 text-warning-700 mb-3 rounded-[var(--radius-md)] border px-4 py-3 text-sm"
+              >
+                الوقت الذي اخترته حُجز قبل لحظات. اختر وقتاً آخر من الأوقات المتاحة الآن.
+              </p>
+              <!-- Until the taken times are known every time would look free. -->
+              <div
+                v-if="busyState === 'loading'"
+                class="grid grid-cols-3 gap-2 sm:grid-cols-5"
+                aria-busy="true"
+                aria-label="جاري تحميل الأوقات"
+              >
+                <span
+                  v-for="n in 10"
+                  :key="n"
+                  class="bg-surface-sunken h-11 animate-pulse rounded-[var(--radius-md)]"
+                />
+              </div>
+              <div
+                v-else-if="busyState === 'failed'"
+                role="alert"
+                class="border-warning-100 bg-warning-50 text-warning-700 rounded-[var(--radius-md)] border px-4 py-4 text-center text-sm"
+              >
+                تعذّر التحقق من الأوقات المحجوزة، فلم نعرضها حتى لا تختار وقتاً محجوزاً.
+                <button type="button" class="font-semibold underline" @click="loadBusy">
+                  إعادة المحاولة
+                </button>
+              </div>
+              <p
+                v-else-if="!slots.length"
                 class="bg-surface-sunken text-fg-subtle rounded-[var(--radius-md)] px-4 py-6 text-center text-sm"
               >
-                لا يوجد دوام في هذا اليوم. اختر يوماً آخر.
+                {{ emptyDay }}
               </p>
               <div v-else class="space-y-4">
                 <div v-for="g in grouped" :key="g.key">
@@ -1101,6 +1171,9 @@ const dayTitle = computed(() =>
           >
             {{ nextAction.label }}
           </button>
+          <p v-if="bookError" role="alert" class="text-danger-700 mt-3 text-center text-sm">
+            {{ bookError }}
+          </p>
           <p class="text-fg-subtle mt-3 text-center text-xs">الدفع في المنشأة عند الحضور.</p>
         </div>
       </aside>

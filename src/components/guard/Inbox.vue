@@ -27,6 +27,7 @@ import { clone } from '@/lib/clone'
 import { fromNow, relativeDay, relativeDayTime, time } from '@/lib/format'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
+import { digitsOnly } from '@/lib/digits'
 
 /**
  * The customer-service inbox.
@@ -83,7 +84,7 @@ const counts = computed(() =>
 )
 const list = computed(() => {
   const q = query.value.trim()
-  const digits = q.replace(/\D/g, '')
+  const digits = digitsOnly(q)
   return (
     rows.value
       .filter((r) => inFilter(r, filter.value))
@@ -91,8 +92,7 @@ const list = computed(() => {
         (r) =>
           !q ||
           (r.view?.customer?.name ?? '').includes(q) ||
-          (digits.length > 2 &&
-            (r.view?.customer?.phone ?? '').replace(/\D/g, '').includes(digits)),
+          (digits.length > 2 && digitsOnly(r.view?.customer?.phone).includes(digits)),
       )
       // Waiting longest first when someone is waiting; otherwise newest first.
       .sort((a, b) =>

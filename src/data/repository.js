@@ -8,6 +8,7 @@ import { withDefaults } from '@/lib/guard'
 import { planActions } from '@/lib/guardEngine'
 import { applyActions, applyOfferReply, applyReply } from '@/lib/guardBackend'
 import { addDays, format } from 'date-fns'
+import { digitsOnly } from '@/lib/digits'
 
 /**
  * The seam between the UI and persistence.
@@ -487,8 +488,8 @@ class LocalRepository {
 
   async joinWaitlist({ serviceId, day, window, name, phone }) {
     const customers = read(KEY_CUSTOMERS) ?? seedCustomers
-    const digits = phone.replace(/\D/g, '')
-    let customer = customers.find((c) => c.phone.replace(/\D/g, '') === digits)
+    const digits = digitsOnly(phone)
+    let customer = customers.find((c) => digitsOnly(c.phone) === digits)
     if (!customer) {
       customer = {
         id: crypto.randomUUID(),

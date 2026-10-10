@@ -76,10 +76,10 @@ await page.getByLabel(/رقم الجوال/).fill('0501112222')
 await page.screenshot({ path: `${OUT}/guest-book-3.png` })
 await page.getByRole('button', { name: 'تأكيد الحجز' }).first().click()
 await page.waitForTimeout(500)
-// The demo shows the WhatsApp code in a toast; a returning device skips this.
+// The demo shows the code in the code step itself (DemoCode); a returning
+// device skips the step.
 if (await page.getByText('أدخل رمز التحقق').count()) {
-  const toastText = await page.locator('[data-sonner-toast]').last().innerText()
-  await page.keyboard.type(toastText.match(/\d{4}/)?.[0] ?? '')
+  await page.keyboard.type(await page.locator('[data-demo-code]').innerText())
 }
 await page.waitForTimeout(900)
 await page.screenshot({ path: `${OUT}/guest-confirmed.png` })
@@ -677,8 +677,7 @@ await go('/app/settings?tab=services', 'app-settings-class', 800)
     await page.getByRole('button', { name: 'تأكيد الحجز' }).first().click()
     await page.waitForTimeout(500)
     if (await page.getByText('أدخل رمز التحقق').count()) {
-      const t = await page.locator('[data-sonner-toast]').last().innerText()
-      await page.keyboard.type(t.match(/\d{4}/)?.[0] ?? '')
+      await page.keyboard.type(await page.locator('[data-demo-code]').innerText())
     }
     await page.waitForTimeout(900)
     return line
@@ -742,6 +741,50 @@ await go('/', 'home-pricing', 800)
     /99/.test(text) && /249/.test(text) && !/قريباً/.test(text)
       ? '✓ the pricing page shows the real plans'
       : '✗ pricing page out of date',
+  )
+}
+
+// --- a phone typed on an Arabic keyboard ------------------------------------
+// ٠٥٠… used to be emptied by /\D/ and read as "phone missing". A new number,
+// so the device has not proven it and the code step shows.
+await go('/book', 'guest-book-arabic-digits', 800)
+{
+  await page
+    .getByRole('button', { name: 'لست أنا' })
+    .click()
+    .catch(() => {})
+  await page.getByRole('radio', { name: /استشارة جلدية/ }).click()
+  for (const id of ['#day-2', '#day-3', '#day-4']) {
+    if (await page.locator(`${id}:not([disabled])`).count()) {
+      await page.locator(id).click()
+      break
+    }
+  }
+  await page.waitForTimeout(300)
+  await page
+    .locator('[role="radiogroup"][aria-label^="أوقات"] [role="radio"]:not([disabled])')
+    .first()
+    .click()
+  await page.getByLabel(/الاسم الكامل/).fill('رقم بأرقام عربية')
+  await page.getByLabel(/رقم الجوال/).fill('٠٥٠٩٩٩٨٨٧٧')
+  const shown = await page.getByLabel(/رقم الجوال/).inputValue()
+  await page.getByRole('button', { name: 'تأكيد الحجز' }).first().click()
+  await page.waitForTimeout(500)
+  const asked = (await page.getByText('أدخل رمز التحقق').count()) > 0
+  if (asked) await page.keyboard.type(await page.locator('[data-demo-code]').innerText())
+  await page.waitForTimeout(900)
+  const booked = (await page.getByText('تم حجز موعدك').count()) > 0
+  console.log(
+    shown === '0509998877' && asked && booked
+      ? '✓ a phone typed in Arabic digits books (and reads as 0509998877)'
+      : `✗ Arabic digits (field="${shown}", code step=${asked}, booked=${booked})`,
+  )
+  // The demo code belongs to the code step: nothing of it is left once booked.
+  const lingering = await page.locator('[data-sonner-toast]').filter({ hasText: /رمز/ }).count()
+  console.log(
+    lingering === 0
+      ? '✓ no code notice is left over the confirmation'
+      : '✗ a code notice still covers the confirmation',
   )
 }
 

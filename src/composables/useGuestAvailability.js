@@ -37,6 +37,13 @@ export const groupByPeriod = (slots) =>
 export function useGuestAvailability() {
   const bookings = useBookingsStore()
   const busy = ref({})
+  /**
+   * Whether the taken times are known yet: 'loading' | 'ready' | 'failed'.
+   * Until they are, every time would look free — so the page shows
+   * placeholders instead, and says so when the lookup failed.
+   */
+  const busyState = ref(isDemoBackend ? 'ready' : 'loading')
+  let busyRequest = 0
 
   const blocking = computed(() =>
     isDemoBackend
@@ -55,6 +62,11 @@ export function useGuestAvailability() {
   /** @param {{ id: string }[]} resources */
   async function loadBusy(resources) {
     if (isDemoBackend || !resources.length) return
+    // Only the latest call may write: picking another service while the
+    // first answer is in flight must not show the first service's times.
+    const request = ++busyRequest
+    busyState.value = 'loading'
+    let failed = false
     const { busyRanges } = await import('@/data/api/public')
     const from = format(nowInZone(), 'yyyy-MM-dd')
     // A day past the window, for the last evening's hours after midnight.
@@ -65,13 +77,14 @@ export function useGuestAvailability() {
         try {
           next[r.id] = await busyRanges(r.id, from, to)
         } catch {
-          // Over-offering is the safe failure: the server still refuses a
-          // slot that has gone, while hiding real availability loses a sale.
           next[r.id] = []
+          failed = true
         }
       }),
     )
+    if (request !== busyRequest) return
     busy.value = next
+    busyState.value = failed ? 'failed' : 'ready'
   }
 
   /**
@@ -176,5 +189,5 @@ export function useGuestAvailability() {
     })
   }
 
-  return { busy, loadBusy, slotsOn, freeCount, nearest, seats, loadSeats, sessionsFor }
+  return { busy, busyState, loadBusy, slotsOn, freeCount, nearest, seats, loadSeats, sessionsFor }
 }

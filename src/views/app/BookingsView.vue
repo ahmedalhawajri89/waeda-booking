@@ -18,6 +18,7 @@ import BookingsTable from '@/components/booking/BookingsTable.vue'
 import { toast } from 'vue-sonner'
 import { clone } from '@/lib/clone'
 import SearchInput from '@/components/ui/SearchInput.vue'
+import { digitsOnly } from '@/lib/digits'
 
 const emit = defineEmits(['openBooking'])
 
@@ -107,12 +108,12 @@ function matchesQuick(b) {
 function matchesQuery(b) {
   const q = query.value.trim()
   if (!q) return true
-  const digits = q.replace(/\D/g, '')
+  const digits = digitsOnly(q)
   const customer = customers.byId(b.customerId)
   return (
     b.reference.toLowerCase().includes(q.toLowerCase()) ||
     (customer?.name.includes(q) ?? false) ||
-    (digits.length > 2 && (customer?.phone.replace(/\D/g, '').includes(digits) ?? false))
+    (digits.length > 2 && (digitsOnly(customer?.phone).includes(digits) ?? false))
   )
 }
 

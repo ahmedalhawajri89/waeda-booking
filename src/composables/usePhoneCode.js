@@ -1,6 +1,5 @@
 import { onBeforeUnmount, ref } from 'vue'
 import { toast } from 'vue-sonner'
-import { business } from '@/data/business'
 import { isDemoBackend } from '@/data/repository'
 
 /**
@@ -11,12 +10,12 @@ import { isDemoBackend } from '@/data/repository'
  * On the demo there is no server, so the code is made here and checked here.
  * With the API it is the server's — this page never knows it, unless the
  * server echoes it because no real channel is connected yet (`devCode`), in
- * which case it is shown the way a WhatsApp message would arrive.
+ * which case the code step shows it (`shown`, see DemoCode).
  */
 export function usePhoneCode() {
   const resendIn = ref(0)
-  /** The code was shown on screen rather than sent: say so on the page. */
-  const echoed = ref(false)
+  /** The code, when it is shown on the page rather than sent; '' otherwise. */
+  const shown = ref('')
   let timer
   let demoCode = ''
 
@@ -31,8 +30,7 @@ export function usePhoneCode() {
   onBeforeUnmount(() => clearInterval(timer))
 
   function show(code) {
-    echoed.value = true
-    toast(`واتساب · ${business.name}`, { description: `رمز التحقق: ${code}`, duration: 8000 })
+    shown.value = code
   }
 
   /** @returns {Promise<boolean>} whether a code went out */
@@ -71,5 +69,5 @@ export function usePhoneCode() {
     }
   }
 
-  return { resendIn, echoed, send, verify }
+  return { resendIn, shown, send, verify }
 }

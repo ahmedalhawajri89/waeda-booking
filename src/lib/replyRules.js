@@ -1,4 +1,5 @@
 import { addDays, format, startOfDay } from 'date-fns'
+import { toLatinDigits } from './digits'
 
 /**
  * Reading a customer's reply with rules — the guard's understanding when no
@@ -65,11 +66,6 @@ const HOUR = new RegExp(
   'u',
 )
 
-/** Arabic-Indic and Persian digits to ASCII, so "٢" and "2" read the same. */
-function asciiDigits(text) {
-  return text.replace(/[٠-٩۰-۹]/g, (d) => String(((d.charCodeAt(0) - 0x0660) % 0x90) % 10))
-}
-
 /**
  * @param {string} text
  * @param {{ now?: Date, offered?: number }} [ctx] `offered`: how many times an
@@ -78,7 +74,7 @@ function asciiDigits(text) {
  */
 export function understandReply(text, ctx = {}) {
   const now = ctx.now ?? new Date()
-  const t = asciiDigits(text.trim()).replace(/[.!،؟?]+$/u, '')
+  const t = toLatinDigits(text.trim()).replace(/[.!،؟?]+$/u, '')
 
   if (ctx.offered) {
     const n = /^(\d)$/.exec(t)

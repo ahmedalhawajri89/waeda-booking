@@ -24,6 +24,7 @@ import BaseAvatar from '@/components/ui/BaseAvatar.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseDrawer from '@/components/ui/BaseDrawer.vue'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
+import { digitsOnly } from '@/lib/digits'
 
 const emit = defineEmits(['openBooking'])
 
@@ -116,7 +117,7 @@ const COLS = [
 ]
 
 const waLink = (phone) => {
-  const d = (phone ?? '').replace(/\D/g, '')
+  const d = digitsOnly(phone)
   return `https://wa.me/${d.startsWith('0') ? '966' + d.slice(1) : d}`
 }
 const selected = computed(() => (selectedId.value ? customers.byId(selectedId.value) : null))

@@ -26,6 +26,7 @@ import { dayLabel, duration, money, time } from '@/lib/format'
 import { initialOf } from '@/data/business'
 import { durationsOf, priceFor } from '@/lib/pricing'
 import { isConflict } from '@/data/errors'
+import { digitsOnly, toLatinDigits } from '@/lib/digits'
 
 /**
  * Operator create/reschedule on one wide surface, everything in view at once:
@@ -49,6 +50,12 @@ const resourceId = ref(services[0].resourceIds[0])
 const date = ref(startOfDay(new Date()))
 const startAt = ref(null)
 const phone = ref('')
+// Arabic-keyboard digits become Latin as they are typed: what the page
+// shows is what the server stores.
+watch(phone, (v) => {
+  const latin = toLatinDigits(v)
+  if (latin !== v) phone.value = latin
+})
 const name = ref('')
 const paymentStatus = ref('unpaid')
 const notes = ref('')
@@ -141,7 +148,7 @@ const nameError = computed(() =>
 )
 const phoneError = computed(() => {
   if (!touched.value) return undefined
-  const digits = phone.value.replace(/\D/g, '')
+  const digits = digitsOnly(phone.value)
   if (digits.length === 0) return 'رقم الجوال مطلوب'
   if (digits.length < 9) return 'رقم الجوال غير مكتمل'
   return undefined
@@ -407,7 +414,7 @@ const resourceName = computed(
 const done = computed(() => ({
   who:
     !!rescheduling.value ||
-    (phone.value.replace(/\D/g, '').length >= 9 && (!!matched.value || !!name.value.trim())),
+    (digitsOnly(phone.value).length >= 9 && (!!matched.value || !!name.value.trim())),
   what: !!service.value,
   when: !!startAt.value,
 }))
