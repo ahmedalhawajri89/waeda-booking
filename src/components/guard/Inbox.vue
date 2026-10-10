@@ -416,7 +416,7 @@ customers.load()
             aria-label="رجوع إلى المحادثات"
             @click="select(null)"
           >
-            <ArrowRight class="h-4 w-4 ltr:rotate-180" />
+            <ArrowRight class="h-4 w-4 ltr:rotate-180" aria-hidden="true" />
           </button>
           <span
             class="bg-surface-sunken text-fg grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-bold"
@@ -534,8 +534,8 @@ customers.load()
                 type="button"
                 role="radio"
                 :aria-checked="mode === 'staff'"
-                class="rounded-[6px] px-2 py-1"
-                :class="mode === 'staff' ? 'bg-surface text-fg shadow-sm' : 'text-fg-subtle'"
+                class="rounded-sm px-2 py-1"
+                :class="mode === 'staff' ? 'bg-surface text-fg elev-raised' : 'text-fg-subtle'"
                 @click="mode = 'staff'"
               >
                 رد الفريق
@@ -544,8 +544,8 @@ customers.load()
                 type="button"
                 role="radio"
                 :aria-checked="mode === 'simulate'"
-                class="flex items-center gap-1 rounded-[6px] px-2 py-1"
-                :class="mode === 'simulate' ? 'bg-surface text-fg shadow-sm' : 'text-fg-subtle'"
+                class="flex items-center gap-1 rounded-sm px-2 py-1"
+                :class="mode === 'simulate' ? 'bg-surface text-fg elev-raised' : 'text-fg-subtle'"
                 title="جرّب كيف يفهم المساعد ردود العملاء"
                 @click="mode = 'simulate'"
               >
@@ -580,7 +580,7 @@ customers.load()
               :disabled="!draft.trim() || sending"
               :aria-label="mode === 'staff' ? 'إرسال' : 'أرسل كأنك العميل'"
             >
-              <Send class="h-4 w-4 ltr:rotate-0 rtl:-scale-x-100" />
+              <Send class="h-4 w-4 rtl:-scale-x-100" aria-hidden="true" />
             </button>
           </form>
           <p class="text-fg-faint mt-1.5 text-[11px]">
@@ -617,7 +617,7 @@ customers.load()
             class="border-border text-fg-muted hover:text-fg grid h-9 w-9 place-items-center rounded-full border"
             aria-label="اتصال"
             title="اتصال"
-            ><Phone class="h-4 w-4"
+            ><Phone class="h-4 w-4" aria-hidden="true"
           /></a>
           <a
             v-if="waLink"
@@ -627,7 +627,7 @@ customers.load()
             class="border-border text-fg-muted hover:text-fg grid h-9 w-9 place-items-center rounded-full border"
             aria-label="فتح واتساب"
             title="فتح واتساب"
-            ><MessageCircle class="h-4 w-4"
+            ><MessageCircle class="h-4 w-4" aria-hidden="true"
           /></a>
         </div>
       </div>

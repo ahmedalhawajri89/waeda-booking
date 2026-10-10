@@ -63,7 +63,7 @@ import { Check, Clock, Copy, MessageCircle } from 'lucide-vue-next'
               class="border-border bg-surface-sunken mb-3 flex items-center justify-between rounded-[var(--radius-md)] border px-3 py-2"
             >
               <span class="text-fg text-[13px] font-semibold" dir="ltr">waeda.app/lamsa</span>
-              <Copy class="text-fg-subtle h-4 w-4" />
+              <Copy class="text-fg-subtle h-4 w-4" aria-hidden="true" />
             </div>
             <div class="flex flex-wrap gap-1.5 text-[12px]">
               <span class="border-border text-fg-muted rounded-full border px-2.5 py-1"
@@ -93,19 +93,19 @@ import { Check, Clock, Copy, MessageCircle } from 'lucide-vue-next'
             <li class="flex items-center justify-between px-4 py-2.5">
               <span class="text-fg font-semibold">10:00 · منيرة</span>
               <span class="text-success-700 flex items-center gap-1 font-semibold"
-                ><Check class="h-3.5 w-3.5" /> أكّدت</span
+                ><Check class="h-3.5 w-3.5" aria-hidden="true" /> أكّدت</span
               >
             </li>
             <li class="flex items-center justify-between px-4 py-2.5">
               <span class="text-fg font-semibold">11:00 · ريما</span>
               <span class="text-warning-700 flex items-center gap-1 font-semibold"
-                ><Clock class="h-3.5 w-3.5" /> لم ترد</span
+                ><Clock class="h-3.5 w-3.5" aria-hidden="true" /> لم ترد</span
               >
             </li>
             <li class="flex items-center justify-between px-4 py-2.5">
               <span class="text-fg font-semibold">12:30 · جود</span>
               <span class="text-fg-subtle flex items-center gap-1 font-semibold"
-                ><MessageCircle class="h-3.5 w-3.5" /> أُرسل التذكير</span
+                ><MessageCircle class="h-3.5 w-3.5" aria-hidden="true" /> أُرسل التذكير</span
               >
             </li>
           </ul>

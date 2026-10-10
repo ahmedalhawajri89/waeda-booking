@@ -3,7 +3,7 @@ import { ref } from 'vue'
 
 /**
  * Roving-tabindex tablist: one stop in the tab order, arrows move between
- * tabs. Same keyboard model as DateStrip, which already does this well.
+ * tabs. Same keyboard model as DayPicker, which already does this well.
  *
  * Arrow direction is swapped in RTL — ArrowLeft must move visually left, and
  * visually left is "next" when the strip runs right-to-left.

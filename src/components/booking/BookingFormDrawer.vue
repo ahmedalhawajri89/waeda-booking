@@ -435,7 +435,7 @@ const stepClass = (isDone) => [
 const SEGMENTED = 'bg-surface-sunken flex gap-1 rounded-[var(--radius-md)] p-1'
 const segment = (on) => [
   'flex-1 cursor-pointer rounded-[calc(var(--radius-md)-2px)] px-2 py-1.5 text-center text-xs font-semibold transition-colors',
-  on ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted hover:text-fg',
+  on ? 'bg-surface text-fg elev-raised' : 'text-fg-muted hover:text-fg',
 ]
 
 const PAYMENTS = [
@@ -605,7 +605,7 @@ const PAYMENTS = [
                       class="grid h-4 w-4 shrink-0 place-items-center rounded-full border"
                       :class="
                         serviceId === s.id
-                          ? 'border-primary bg-primary text-white'
+                          ? 'border-primary bg-primary text-fg-on-primary'
                           : 'border-border'
                       "
                       aria-hidden="true"
@@ -664,7 +664,7 @@ const PAYMENTS = [
             <div class="border-border border-t p-6 lg:border-s lg:border-t-0">
               <p class="mb-3 flex items-center gap-2.5">
                 <span :class="stepClass(true)" aria-hidden="true">
-                  <Check class="h-3.5 w-3.5" />
+                  <Check class="h-3.5 w-3.5" aria-hidden="true" />
                 </span>
                 <span class="text-fg text-sm font-bold">اليوم</span>
               </p>
@@ -788,7 +788,7 @@ const PAYMENTS = [
               خيارات
               <span
                 v-if="optionsSet"
-                class="bg-primary rounded-full px-1.5 text-[11px] leading-5 text-white"
+                class="bg-primary text-fg-on-primary rounded-full px-1.5 text-[11px] leading-5"
                 data-numeric
                 >{{ optionsSet }}</span
               >

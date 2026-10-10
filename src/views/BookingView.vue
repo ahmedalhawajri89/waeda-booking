@@ -897,7 +897,7 @@ const dayTitle = computed(() =>
                     class="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border px-3 py-2.5 text-start transition-colors"
                     :class="
                       startAt === s.startAt && sessionResource === s.resourceId
-                        ? 'border-primary bg-primary text-white'
+                        ? 'border-primary bg-primary text-fg-on-primary'
                         : s.left === 0
                           ? 'border-border text-fg-faint cursor-not-allowed'
                           : 'border-border text-fg hover:border-fg'
@@ -1087,7 +1087,7 @@ const dayTitle = computed(() =>
                       class="flex min-h-11 flex-col items-center justify-center rounded-[var(--radius-md)] border py-1 text-sm font-semibold transition-colors"
                       :class="
                         startAt === s.startAt
-                          ? 'border-primary bg-primary text-white'
+                          ? 'border-primary bg-primary text-fg-on-primary'
                           : s.state === 'available'
                             ? 'border-border text-fg hover:border-fg'
                             : 'text-fg-faint cursor-not-allowed border-transparent line-through'

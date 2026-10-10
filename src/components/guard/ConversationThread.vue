@@ -87,7 +87,7 @@ async function send(text = draft.value) {
         :class="m.direction === 'out' ? 'justify-start' : 'justify-end'"
       >
         <div
-          class="max-w-[85%] rounded-[var(--radius-md)] px-3 py-2 text-sm shadow-xs"
+          class="elev-raised max-w-[85%] rounded-[var(--radius-md)] px-3 py-2 text-sm"
           :class="
             m.direction === 'out'
               ? 'bg-primary-soft text-fg rounded-ss-sm'
@@ -143,11 +143,11 @@ async function send(text = draft.value) {
         />
         <button
           type="submit"
-          class="bg-primary hover:bg-primary-hover inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-md)] text-white disabled:opacity-50"
+          class="bg-primary hover:bg-primary-hover text-fg-on-primary inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-md)] disabled:opacity-50"
           :disabled="!draft.trim() || sending"
           aria-label="إرسال الرد"
         >
-          <Send class="h-4 w-4 rotate-180" aria-hidden="true" />
+          <Send class="h-4 w-4 rtl:-scale-x-100" aria-hidden="true" />
         </button>
       </div>
       <div class="mt-2 flex flex-wrap gap-1.5">

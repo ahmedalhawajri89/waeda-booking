@@ -680,7 +680,7 @@ const price = (p) => (Number(p) > 0 ? `${Number(p)} ر.س` : 'مجاناً')
                   :aria-label="`إزالة ${m.name}`"
                   @click="staff.splice(i, 1)"
                 >
-                  <X class="h-3.5 w-3.5" />
+                  <X class="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
               </span>
             </div>
@@ -755,7 +755,7 @@ const price = (p) => (Number(p) > 0 ? `${Number(p)} ر.س` : 'مجاناً')
               <div class="border-border border-b px-4 pt-2 pb-3">
                 <div class="flex items-center gap-2.5">
                   <span
-                    class="bg-ink font-display grid h-9 w-9 shrink-0 place-items-center rounded-[8px] text-sm font-bold text-white"
+                    class="bg-ink font-display grid h-9 w-9 shrink-0 place-items-center rounded-md text-sm font-bold text-white"
                     >{{ preview.initial }}</span
                   >
                   <div class="min-w-0">
@@ -767,7 +767,7 @@ const price = (p) => (Number(p) > 0 ? `${Number(p)} ر.س` : 'مجاناً')
                   v-if="preview.address"
                   class="text-fg-subtle mt-1.5 flex items-center gap-1 truncate text-[10px]"
                 >
-                  <MapPin class="h-3 w-3 shrink-0" />{{ preview.address }}
+                  <MapPin class="h-3 w-3 shrink-0" aria-hidden="true" />{{ preview.address }}
                 </p>
               </div>
               <div class="flex-1 space-y-3 overflow-hidden px-4 py-3">
@@ -776,7 +776,7 @@ const price = (p) => (Number(p) > 0 ? `${Number(p)} ر.س` : 'مجاناً')
                   <li
                     v-for="(s, i) in preview.services.slice(0, 4)"
                     :key="s.name + i"
-                    class="border-border flex items-center gap-2 rounded-[8px] border px-2.5 py-2"
+                    class="border-border flex items-center gap-2 rounded-md border px-2.5 py-2"
                     :class="i === 0 && 'border-fg'"
                   >
                     <component
@@ -812,7 +812,7 @@ const price = (p) => (Number(p) > 0 ? `${Number(p)} ر.س` : 'مجاناً')
               </div>
               <div class="border-border border-t p-3">
                 <span
-                  class="bg-primary block rounded-[8px] py-2 text-center text-[11px] font-bold text-white"
+                  class="bg-primary text-fg-on-primary block rounded-md py-2 text-center text-[11px] font-bold"
                   >احجز موعدك</span
                 >
               </div>

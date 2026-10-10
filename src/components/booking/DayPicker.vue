@@ -80,7 +80,7 @@ function onKey(e, i) {
           aria-label="الأسبوع السابق"
           @click="page--"
         >
-          <ChevronRight class="h-4 w-4 ltr:rotate-180" />
+          <ChevronRight class="h-4 w-4 ltr:rotate-180" aria-hidden="true" />
         </button>
         <button
           type="button"
@@ -89,7 +89,7 @@ function onKey(e, i) {
           aria-label="الأسبوع التالي"
           @click="page++"
         >
-          <ChevronLeft class="h-4 w-4 ltr:rotate-180" />
+          <ChevronLeft class="h-4 w-4 ltr:rotate-180" aria-hidden="true" />
         </button>
       </div>
     </div>

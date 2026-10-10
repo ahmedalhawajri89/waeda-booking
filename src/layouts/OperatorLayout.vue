@@ -315,7 +315,7 @@ const wide = computed(() => !folded.value)
               :aria-label="`المنشأة: ${business.name}`"
             >
               <span
-                class="bg-ink dark:bg-surface-raised dark:ring-border font-display grid h-8 w-8 shrink-0 place-items-center rounded-[8px] text-sm font-bold text-white dark:ring-1"
+                class="bg-ink dark:bg-surface-raised dark:ring-border font-display grid h-8 w-8 shrink-0 place-items-center rounded-md text-sm font-bold text-white dark:ring-1"
                 aria-hidden="true"
                 >{{ business.initial }}</span
               >
@@ -341,7 +341,7 @@ const wide = computed(() => !folded.value)
           title="طي الشريط"
           @click="toggleRail"
         >
-          <PanelRightClose class="h-4 w-4 ltr:rotate-180" />
+          <PanelRightClose class="h-4 w-4 ltr:rotate-180" aria-hidden="true" />
         </button>
       </div>
       <button
@@ -352,7 +352,7 @@ const wide = computed(() => !folded.value)
         title="توسيع الشريط"
         @click="toggleRail"
       >
-        <PanelRightOpen class="h-4 w-4 ltr:rotate-180" />
+        <PanelRightOpen class="h-4 w-4 ltr:rotate-180" aria-hidden="true" />
       </button>
 
       <!-- find, and add: the two things done from anywhere -->
@@ -627,7 +627,7 @@ const wide = computed(() => !folded.value)
         @click="openCreate()"
       >
         <span
-          class="bg-primary text-fg-on-primary ring-canvas grid h-12 w-12 place-items-center rounded-full shadow-lg ring-4"
+          class="bg-primary text-fg-on-primary ring-canvas elev-overlay grid h-12 w-12 place-items-center rounded-full ring-4"
         >
           <Plus class="h-6 w-6" aria-hidden="true" />
         </span>

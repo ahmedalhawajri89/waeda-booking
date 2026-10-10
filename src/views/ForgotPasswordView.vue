@@ -77,7 +77,7 @@ async function send() {
             class="bg-surface-sunken text-fg mb-5 grid h-11 w-11 place-items-center rounded-full"
             aria-hidden="true"
           >
-            <KeyRound class="h-5 w-5" />
+            <KeyRound class="h-5 w-5" aria-hidden="true" />
           </span>
           <h1 class="font-display text-fg mb-2 text-2xl font-bold">نسيت كلمة المرور؟</h1>
           <p class="text-fg-muted mb-6 text-sm leading-relaxed">
@@ -112,7 +112,7 @@ async function send() {
             class="bg-success-50 text-success-700 mb-5 grid h-11 w-11 place-items-center rounded-full"
             aria-hidden="true"
           >
-            <MailCheck class="h-5 w-5" />
+            <MailCheck class="h-5 w-5" aria-hidden="true" />
           </span>
           <h1 class="font-display text-fg mb-2 text-2xl font-bold" role="status">تحقق من بريدك</h1>
           <p class="text-fg-muted mb-1 text-sm leading-relaxed">

@@ -403,7 +403,7 @@ const reasons = (risk) => notableFactors(risk, { raising: true, limit: 2 }).map(
                         aria-label="أرسل تذكيراً على واتساب"
                         title="أرسل تذكيراً على واتساب"
                       >
-                        <MessageCircle class="h-4 w-4" />
+                        <MessageCircle class="h-4 w-4" aria-hidden="true" />
                       </a>
                       <a
                         v-if="store.hydrate(booking).customer"
@@ -412,7 +412,7 @@ const reasons = (risk) => notableFactors(risk, { raising: true, limit: 2 }).map(
                         aria-label="اتصال"
                         title="اتصال"
                       >
-                        <Phone class="h-4 w-4" />
+                        <Phone class="h-4 w-4" aria-hidden="true" />
                       </a>
                     </div>
                   </div>

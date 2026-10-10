@@ -646,7 +646,7 @@ function moveInstead() {
                       class="h-11 rounded-[var(--radius-md)] border text-sm font-semibold transition-colors"
                       :class="
                         newStart === s.startAt
-                          ? 'border-primary bg-primary text-white'
+                          ? 'border-primary bg-primary text-fg-on-primary'
                           : s.state === 'available'
                             ? 'border-border text-fg hover:border-fg'
                             : 'text-fg-faint cursor-not-allowed border-transparent line-through'
@@ -675,8 +675,7 @@ function moveInstead() {
 
             <button
               type="button"
-              class="w-full rounded-[var(--radius-md)] py-3 text-sm font-bold transition-colors"
-              :class="newStart ? 'btn-brand' : 'bg-surface-sunken text-fg-faint cursor-not-allowed'"
+              class="btn-brand w-full rounded-[var(--radius-md)] py-3 text-sm font-bold"
               :disabled="!newStart || saving"
               @click="saveMove"
             >

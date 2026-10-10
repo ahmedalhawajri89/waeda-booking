@@ -97,7 +97,7 @@ async function submit() {
             class="bg-warning-50 text-warning-700 mb-5 grid h-11 w-11 place-items-center rounded-full"
             aria-hidden="true"
           >
-            <Link2Off class="h-5 w-5" />
+            <Link2Off class="h-5 w-5" aria-hidden="true" />
           </span>
           <h1 class="font-display text-fg mb-2 text-2xl font-bold" role="alert">
             الرابط لم يعد صالحاً
@@ -119,7 +119,7 @@ async function submit() {
             class="bg-surface-sunken text-fg mb-5 grid h-11 w-11 place-items-center rounded-full"
             aria-hidden="true"
           >
-            <LockKeyhole class="h-5 w-5" />
+            <LockKeyhole class="h-5 w-5" aria-hidden="true" />
           </span>
           <h1 class="font-display text-fg mb-2 text-2xl font-bold">كلمة مرور جديدة</h1>
           <p class="text-fg-muted mb-6 text-sm">

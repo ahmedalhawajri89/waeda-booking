@@ -16,7 +16,7 @@ const props = defineProps({
 
 const VARIANT = {
   primary:
-    'bg-primary text-white hover:bg-primary-hover active:bg-primary-active border-transparent',
+    'bg-primary text-fg-on-primary hover:bg-primary-hover active:bg-primary-active border-transparent',
   secondary:
     'bg-surface text-fg-muted hover:bg-surface-hover active:bg-surface-sunken border-border',
   ghost: 'bg-transparent text-fg-muted hover:bg-surface-sunken active:bg-border border-transparent',

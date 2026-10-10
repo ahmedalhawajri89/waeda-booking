@@ -478,7 +478,7 @@ function whatsappFor(e) {
                 aria-label="راسله على واتساب"
                 title="راسله على واتساب"
               >
-                <MessageCircle class="h-3.5 w-3.5" />
+                <MessageCircle class="h-3.5 w-3.5" aria-hidden="true" />
               </a>
             </div>
           </li>

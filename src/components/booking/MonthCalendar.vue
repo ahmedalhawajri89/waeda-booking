@@ -131,7 +131,7 @@ function onKey(e, c) {
         :class="[
           !c.inMonth && 'invisible',
           c.selected
-            ? 'bg-primary text-white'
+            ? 'bg-primary text-fg-on-primary'
             : c.disabled
               ? 'text-fg-faint cursor-not-allowed'
               : c.full

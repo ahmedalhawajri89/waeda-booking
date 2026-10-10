@@ -38,7 +38,7 @@ defineExpose({ focus: () => input.value?.focus() })
       style="inset-inline-end: 8px"
       @click="emit('update:modelValue', '')"
     >
-      <X class="h-3.5 w-3.5" />
+      <X class="h-3.5 w-3.5" aria-hidden="true" />
     </button>
     <kbd
       v-else-if="shortcut"

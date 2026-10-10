@@ -369,7 +369,7 @@ const CHANNEL = { online: 'من صفحة الحجز', phone: 'حجز هاتفي'
         title="الحجز السابق (K)"
         @click="goTo(prevId)"
       >
-        <ChevronRight class="h-4 w-4 ltr:rotate-180" />
+        <ChevronRight class="h-4 w-4 ltr:rotate-180" aria-hidden="true" />
       </button>
       <button
         type="button"
@@ -379,7 +379,7 @@ const CHANNEL = { online: 'من صفحة الحجز', phone: 'حجز هاتفي'
         title="الحجز التالي (J)"
         @click="goTo(nextId)"
       >
-        <ChevronLeft class="h-4 w-4 ltr:rotate-180" />
+        <ChevronLeft class="h-4 w-4 ltr:rotate-180" aria-hidden="true" />
       </button>
     </template>
 
@@ -474,7 +474,7 @@ const CHANNEL = { online: 'من صفحة الحجز', phone: 'حجز هاتفي'
               aria-haspopup="menu"
               aria-label="إجراءات أخرى"
             >
-              <MoreHorizontal class="h-4 w-4" />
+              <MoreHorizontal class="h-4 w-4" aria-hidden="true" />
             </button>
           </template>
         </BaseMenu>
@@ -731,7 +731,7 @@ const CHANNEL = { online: 'من صفحة الحجز', phone: 'حجز هاتفي'
             class="border-border text-fg-muted hover:text-fg grid h-9 w-9 place-items-center rounded-full border"
             aria-label="اتصال"
             title="اتصال"
-            ><Phone class="h-4 w-4"
+            ><Phone class="h-4 w-4" aria-hidden="true"
           /></a>
           <a
             v-if="wa('')"
@@ -741,7 +741,7 @@ const CHANNEL = { online: 'من صفحة الحجز', phone: 'حجز هاتفي'
             class="border-border text-fg-muted hover:text-fg grid h-9 w-9 place-items-center rounded-full border"
             aria-label="واتساب"
             title="واتساب"
-            ><MessageCircle class="h-4 w-4"
+            ><MessageCircle class="h-4 w-4" aria-hidden="true"
           /></a>
         </div>
 

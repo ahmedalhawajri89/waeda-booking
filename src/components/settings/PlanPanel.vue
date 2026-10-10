@@ -172,7 +172,7 @@ async function confirm() {
             role="radio"
             :aria-checked="cycle === c.value"
             class="rounded-full px-3 py-1.5 transition-colors"
-            :class="cycle === c.value ? 'bg-surface text-fg shadow-sm' : 'text-fg-subtle'"
+            :class="cycle === c.value ? 'bg-surface text-fg elev-raised' : 'text-fg-subtle'"
             @click="cycle = c.value"
           >
             {{ c.label }}

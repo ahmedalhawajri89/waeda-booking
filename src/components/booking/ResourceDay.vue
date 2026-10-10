@@ -308,7 +308,7 @@ const gridStyle = computed(() => ({
           <!-- the time under the pointer, offered -->
           <div
             v-if="hover && hover.col === i"
-            class="border-primary-line bg-primary-soft text-primary-fg pointer-events-none absolute inset-x-1 z-10 flex items-center gap-1 rounded-[6px] border border-dashed px-2 text-[11px] font-semibold"
+            class="border-primary-line bg-primary-soft text-primary-fg pointer-events-none absolute inset-x-1 z-10 flex items-center gap-1 rounded-sm border border-dashed px-2 text-[11px] font-semibold"
             :style="{ top: `${hover.top}px`, height: `${px(SNAP * 2)}px` }"
           >
             <Plus class="h-3 w-3" aria-hidden="true" />
@@ -321,7 +321,7 @@ const gridStyle = computed(() => ({
             :key="blk.id"
             type="button"
             data-block
-            class="group absolute z-10 flex touch-none flex-col overflow-hidden rounded-[6px] border px-2 py-1 text-start text-xs transition-shadow hover:shadow-md"
+            class="group absolute z-10 flex touch-none flex-col overflow-hidden rounded-sm border px-2 py-1 text-start text-xs transition-shadow hover:shadow-md"
             :class="[
               bookingTone(blk.b.status),
               MOVABLE.has(blk.b.status) && !blk.group
@@ -386,7 +386,7 @@ const gridStyle = computed(() => ({
           <!-- where a dragged booking would land -->
           <div
             v-if="drag?.moved && drag.col === i"
-            class="border-fg bg-surface pointer-events-none absolute inset-x-1 z-30 rounded-[6px] border-2 px-2 py-1 text-xs shadow-lg"
+            class="border-fg bg-surface elev-overlay pointer-events-none absolute inset-x-1 z-30 rounded-sm border-2 px-2 py-1 text-xs"
             :style="{ top: `${drag.top + 1}px`, height: `${drag.height - 2}px` }"
           >
             <span class="text-fg block truncate font-semibold">{{

@@ -87,7 +87,7 @@ const price = computed(() => (p) => {
           @click="yearly = !yearly"
         >
           <span
-            class="bg-surface absolute top-0.5 h-6 w-6 rounded-full shadow transition-all duration-300"
+            class="bg-surface elev-raised absolute top-0.5 h-6 w-6 rounded-full transition-all duration-300"
             :style="{ insetInlineStart: yearly ? 'calc(100% - 1.625rem)' : '0.125rem' }"
           />
         </button>

@@ -89,7 +89,7 @@ const stepOf = (s) => (s < 3 ? 0 : s < 4 ? 1 : 2)
           <div class="flex h-full flex-col px-3.5 pt-2 pb-3.5">
             <div class="border-border mb-3 flex items-center gap-2 border-b pb-2.5">
               <span class="bg-ink grid h-7 w-7 place-items-center rounded-[7px] text-white">
-                <Stethoscope class="h-3.5 w-3.5" />
+                <Stethoscope class="h-3.5 w-3.5" aria-hidden="true" />
               </span>
               <div class="min-w-0">
                 <p class="text-fg truncate text-[11px] font-bold">عيادات النخبة</p>
@@ -99,7 +99,7 @@ const stepOf = (s) => (s < 3 ? 0 : s < 4 ? 1 : 2)
 
             <p class="text-fg-subtle mb-1.5 text-[9px] font-semibold">الخدمة</p>
             <div
-              class="border-primary bg-primary-soft mb-3 flex items-center justify-between rounded-[8px] border px-2.5 py-2"
+              class="border-primary bg-primary-soft mb-3 flex items-center justify-between rounded-md border px-2.5 py-2"
             >
               <span class="text-fg text-[10px] font-bold">كشف عام</span>
               <span class="text-fg-subtle text-[9px]" data-numeric>20 د · 150 ر.س</span>
@@ -110,10 +110,10 @@ const stepOf = (s) => (s < 3 ? 0 : s < 4 ? 1 : 2)
               <span
                 v-for="t in TIMES"
                 :key="t"
-                class="rounded-[6px] border py-1.5 text-center text-[10px] font-semibold transition-colors duration-300"
+                class="rounded-sm border py-1.5 text-center text-[10px] font-semibold transition-colors duration-300"
                 :class="
                   t === '11:00' && stage >= 1
-                    ? 'border-primary bg-primary text-white'
+                    ? 'border-primary bg-primary text-fg-on-primary'
                     : 'border-border text-fg'
                 "
                 dir="ltr"
@@ -123,8 +123,10 @@ const stepOf = (s) => (s < 3 ? 0 : s < 4 ? 1 : 2)
             </div>
 
             <span
-              class="mt-3 rounded-[8px] py-2 text-center text-[11px] font-bold transition-colors duration-300"
-              :class="stage >= 1 ? 'bg-primary text-white' : 'bg-surface-sunken text-fg-faint'"
+              class="mt-3 rounded-md py-2 text-center text-[11px] font-bold transition-colors duration-300"
+              :class="
+                stage >= 1 ? 'bg-primary text-fg-on-primary' : 'bg-surface-sunken text-fg-faint'
+              "
               :style="stage === 1 ? 'transform: scale(.97)' : ''"
               >تأكيد الحجز</span
             >
@@ -183,14 +185,14 @@ const stepOf = (s) => (s < 3 ? 0 : s < 4 ? 1 : 2)
             }}</span>
             <div
               v-if="row.name"
-              class="border-border bg-surface-sunken flex flex-1 items-center justify-between rounded-[8px] border px-2.5 py-2"
+              class="border-border bg-surface-sunken flex flex-1 items-center justify-between rounded-md border px-2.5 py-2"
             >
               <span class="text-fg text-[11px] font-semibold">{{ row.name }}</span>
               <span class="text-fg-subtle text-[10px]">{{ row.service }}</span>
             </div>
             <div
               v-else
-              class="relative flex flex-1 items-center justify-between rounded-[8px] border px-2.5 py-2 transition-colors duration-500"
+              class="relative flex flex-1 items-center justify-between rounded-md border px-2.5 py-2 transition-colors duration-500"
               :class="
                 stage >= 6
                   ? 'border-success-600/40 bg-success-50'
@@ -225,7 +227,7 @@ const stepOf = (s) => (s < 3 ? 0 : s < 4 ? 1 : 2)
           <div class="flex h-full flex-col">
             <div class="border-border flex items-center gap-2 border-b px-3.5 pt-1 pb-2.5">
               <span class="bg-ink grid h-7 w-7 place-items-center rounded-full text-white">
-                <Stethoscope class="h-3.5 w-3.5" />
+                <Stethoscope class="h-3.5 w-3.5" aria-hidden="true" />
               </span>
               <div>
                 <p class="text-fg text-[11px] font-bold">عيادات النخبة</p>
@@ -237,7 +239,7 @@ const stepOf = (s) => (s < 3 ? 0 : s < 4 ? 1 : 2)
               <Transition name="bubble">
                 <div
                   v-if="stage >= 4"
-                  class="bg-surface text-fg me-5 rounded-[12px] rounded-ss-[4px] px-2.5 py-2 text-[10px] leading-relaxed shadow-sm"
+                  class="bg-surface text-fg elev-raised me-5 rounded-lg rounded-ss-[4px] px-2.5 py-2 text-[10px] leading-relaxed"
                 >
                   مرحباً نورة، نذكّرك بموعدك غداً الساعة 11:00 ص مع د. سارة. للتأكيد أرسلي 1،
                   وللإلغاء 2.
@@ -246,15 +248,15 @@ const stepOf = (s) => (s < 3 ? 0 : s < 4 ? 1 : 2)
               <Transition name="bubble">
                 <div
                   v-if="stage >= 5"
-                  class="bg-primary ms-auto flex w-fit items-center gap-1 rounded-[12px] rounded-se-[4px] px-3 py-1.5 text-[11px] font-bold text-white"
+                  class="bg-primary text-fg-on-primary ms-auto flex w-fit items-center gap-1 rounded-lg rounded-se-[4px] px-3 py-1.5 text-[11px] font-bold"
                 >
-                  1 <CheckCheck class="h-3 w-3 opacity-80" />
+                  1 <CheckCheck class="h-3 w-3 opacity-80" aria-hidden="true" />
                 </div>
               </Transition>
               <Transition name="bubble">
                 <div
                   v-if="stage >= 6"
-                  class="bg-surface text-fg me-5 rounded-[12px] rounded-ss-[4px] px-2.5 py-2 text-[10px] leading-relaxed shadow-sm"
+                  class="bg-surface text-fg elev-raised me-5 rounded-lg rounded-ss-[4px] px-2.5 py-2 text-[10px] leading-relaxed"
                 >
                   تم تأكيد موعدك. نراك غداً.
                 </div>

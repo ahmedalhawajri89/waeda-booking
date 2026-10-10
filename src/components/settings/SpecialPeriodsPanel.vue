@@ -180,7 +180,7 @@ const STATE = {
           :aria-label="`تعديل ${p.label}`"
           @click="edit(p.id)"
         >
-          <Pencil class="h-4 w-4" />
+          <Pencil class="h-4 w-4" aria-hidden="true" />
         </button>
         <button
           type="button"
@@ -188,7 +188,7 @@ const STATE = {
           :aria-label="`حذف ${p.label}`"
           @click="remove(p)"
         >
-          <Trash2 class="h-4 w-4" />
+          <Trash2 class="h-4 w-4" aria-hidden="true" />
         </button>
       </li>
     </ul>
