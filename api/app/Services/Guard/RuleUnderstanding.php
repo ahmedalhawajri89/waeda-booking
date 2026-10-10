@@ -12,8 +12,11 @@ use Carbon\CarbonInterface;
 class RuleUnderstanding implements ReplyUnderstanding
 {
     private const END = '(?=$|[\s.!،؟?,])';
-    private const CONFIRM = '1|نعم|اي|ايوه|إيوه|ايوا|أكيد|اكيد|تمام|مؤكد|أؤكد|اؤكد|جاي|جاية|راح اجي|بجي|ok|okay|yes';
-    private const CANCEL = '2|لا|ألغ\S*|الغ\S*|إلغاء|الغاء|ما راح|مارح|ما بقدر|ما اقدر|ما أقدر|مش جاي|مب جاي|cancel|no';
+    private const CONFIRM = '1|نعم|اي|ايوه|إيوه|ايوا|أكيد|اكيد|تمام|مؤكد|أؤكد|اؤكد|جاي|جاية|راح اجي|بجي|ما راح اتأخر|ما راح أتأخر|مارح اتأخر|مش راح اتأخر|ok|okay|yes';
+    private const CANCEL = '2|ألغ\S*|الغ\S*|إلغاء|الغاء|ما راح (اجي|أجي|احضر|أحضر)|مارح (اجي|أجي|احضر|أحضر)|ما بقدر|ما اقدر|ما أقدر|مش جاي|مب جاي|cancel';
+    /** A bare "no" cancels only on its own; after a leading "لا،" the rest has to say cancel. */
+    private const NO = '^(لا|no)$';
+    private const NO_LEAD = '^(لا|no)[\s،,]+';
     private const LATE = 'بتأخر|بتاخر|متأخر|متاخر|راح اتأخر|تأخير|late';
     private const CHANGE = 'أغير|اغير|أغيّر|غير الموعد|غيّر|تغيير|أأجل|اأجل|أجل|أجّل|تأجيل|خليها|خلّيها|خليه|خلّيه|انقل|نقل|أبدل|ابدل|بدّل|بدل|موعد ثاني|وقت ثاني|موعد تاني|وقت تاني|وقت آخر|موعد آخر|موعد اخر|وقت اخر';
 
@@ -60,7 +63,8 @@ class RuleUnderstanding implements ReplyUnderstanding
         if (preg_match('/('.self::CHANGE.')/u', $t)) {
             return ['intent' => 'reschedule'] + $when;
         }
-        if (preg_match('/^('.self::CANCEL.')'.self::END.'/iu', $t)) {
+        if (preg_match('/'.self::NO.'/iu', $t)
+            || preg_match('/^('.self::CANCEL.')'.self::END.'/iu', preg_replace('/'.self::NO_LEAD.'/iu', '', $t))) {
             return ['intent' => 'cancel'];
         }
         if (preg_match('/^('.self::CONFIRM.')'.self::END.'/iu', $t) || preg_match('/^(👍|✅)/u', $t)) {

@@ -21,13 +21,17 @@ import { addDays, format, startOfDay } from 'date-fns'
 // so the end of a word is spelled out: end of text, whitespace or punctuation.
 const END = String.raw`(?=$|[\s.!،؟?,])`
 const CONFIRM = new RegExp(
-  String.raw`^(1|نعم|اي|ايوه|إيوه|ايوا|أكيد|اكيد|تمام|مؤكد|أؤكد|اؤكد|جاي|جاية|راح اجي|بجي|ok|okay|yes)${END}|^(👍|✅)`,
+  String.raw`^(1|نعم|اي|ايوه|إيوه|ايوا|أكيد|اكيد|تمام|مؤكد|أؤكد|اؤكد|جاي|جاية|راح اجي|بجي|ما راح اتأخر|ما راح أتأخر|مارح اتأخر|مش راح اتأخر|ok|okay|yes)${END}|^(👍|✅)`,
   'iu',
 )
 const CANCEL = new RegExp(
-  String.raw`^(2|لا|ألغ\S*|الغ\S*|إلغاء|الغاء|ما راح|مارح|ما بقدر|ما اقدر|ما أقدر|مش جاي|مب جاي|cancel|no)${END}`,
+  String.raw`^(2|ألغ\S*|الغ\S*|إلغاء|الغاء|ما راح (اجي|أجي|احضر|أحضر)|مارح (اجي|أجي|احضر|أحضر)|ما بقدر|ما اقدر|ما أقدر|مش جاي|مب جاي|cancel)${END}`,
   'iu',
 )
+// A bare "no" cancels only on its own: "لا مشكلة" and "لا، جاي" are not a
+// cancel. After a leading "لا،" the rest has to say cancel by itself.
+const NO = /^(لا|no)$/iu
+const NO_LEAD = /^(لا|no)[\s،,]+/iu
 const LATE = /(بتأخر|بتاخر|متأخر|متاخر|راح اتأخر|تأخير|late)/iu
 const CHANGE =
   /(أغير|اغير|أغيّر|غير الموعد|غيّر|تغيير|أأجل|اأجل|أجل|أجّل|تأجيل|خليها|خلّيها|خليه|خلّيه|انقل|نقل|أبدل|ابدل|بدّل|بدل|موعد ثاني|وقت ثاني|موعد تاني|وقت تاني|وقت آخر|موعد آخر|موعد اخر|وقت اخر)/u
@@ -88,7 +92,7 @@ export function understandReply(text, ctx = {}) {
 
   const when = readWhen(t, now)
   if (CHANGE.test(t)) return { intent: 'reschedule', ...when }
-  if (CANCEL.test(t)) return { intent: 'cancel' }
+  if (NO.test(t) || CANCEL.test(t.replace(NO_LEAD, ''))) return { intent: 'cancel' }
   if (CONFIRM.test(t)) return { intent: 'confirm' }
   if (LATE.test(t)) return { intent: 'late' }
   // A day or a time of day on its own — "الخميس العصر" — is a request to move.

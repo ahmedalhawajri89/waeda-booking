@@ -240,6 +240,7 @@ class GuardEngineTest extends TestCase
         return [
             ['1', 'confirm'], ['نعم', 'confirm'], ['أكيد جاي', 'confirm'], ['تمام.', 'confirm'], ['👍', 'confirm'],
             ['2', 'cancel'], ['ألغيه لو سمحت', 'cancel'], ['ما بقدر اجي', 'cancel'],
+            ['لا', 'cancel'], ['لا، ما بقدر اجي', 'cancel'], ['ما راح اجي', 'cancel'], ['ما راح اتأخر', 'confirm'],
             ['بتأخر ربع ساعة', 'late'], ['مين معي؟', 'unknown'], ['ممكن أغير الموعد للخميس', 'reschedule'],
             ['10 دقائق', 'unknown'],
         ];
