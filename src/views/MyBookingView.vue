@@ -31,6 +31,7 @@ import { business } from '@/data/business'
 import { isConflict } from '@/data/errors'
 import { isDemoBackend } from '@/data/repository'
 import { useGuestBusiness } from '@/composables/useGuestBusiness'
+import { inZone, nowInZone } from '@/lib/zone'
 import { usePhoneCode } from '@/composables/usePhoneCode'
 import CodeInput from '@/components/booking/CodeInput.vue'
 import {
@@ -268,7 +269,7 @@ const shareUrl = computed(() => {
 
 /* ---------------------------------------------------------- move it */
 const moving = ref(false)
-const newDate = ref(startOfDay(new Date()))
+const newDate = ref(startOfDay(nowInZone()))
 const newStart = ref(null)
 const saving = ref(false)
 
@@ -311,9 +312,9 @@ async function openMove() {
   await avail.loadBusy(query.value.resources)
   // Open on the first day that has a time the customer can actually pick —
   // "nearest free" can be within the cutoff, which would open on an empty day.
-  newDate.value = startOfDay(new Date(view.value.startAt))
+  newDate.value = startOfDay(inZone(view.value.startAt))
   for (let i = 0; i < SEARCH_DAYS; i++) {
-    const day = addDays(startOfDay(new Date()), i)
+    const day = addDays(startOfDay(nowInZone()), i)
     if (movableOn(day).some((x) => x.state === 'available')) {
       newDate.value = day
       break

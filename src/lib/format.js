@@ -1,5 +1,6 @@
 import { format, formatDistanceToNowStrict, isSameDay, isToday, isTomorrow } from 'date-fns'
 import { ar } from 'date-fns/locale'
+import { inZone } from './zone'
 
 /* Single source of truth for every user-visible number, date and time.
  * Nothing in the app hand-builds a display string. */
@@ -19,9 +20,9 @@ export function money(minor) {
   return currency.format(minor / 100)
 }
 
-/** @param {string | Date} iso */
+/** On the business's clock, so a time reads the same wherever it is read. @param {string | Date} iso */
 export function toDate(iso) {
-  return iso instanceof Date ? iso : new Date(iso)
+  return inZone(iso)
 }
 
 /** "10:00 ص" */

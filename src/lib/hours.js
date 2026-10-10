@@ -1,5 +1,6 @@
 import { addDays, isSameDay, set, startOfDay } from 'date-fns'
 import { prayerBreaks } from './prayer'
+import { inZone } from './zone'
 
 /**
  * When a business day starts and ends.
@@ -39,7 +40,7 @@ function at(day, hm) {
 
 /** The special period covering this date, if any. */
 export function periodOn(schedule, date) {
-  const d = ymd(date)
+  const d = ymd(inZone(date))
   return (
     (asSchedule(schedule).specialPeriods ?? []).find((p) => p.startsOn <= d && d <= p.endsOn) ??
     null
@@ -51,7 +52,7 @@ export function rowFor(schedule, date) {
   const s = asSchedule(schedule)
   const period = periodOn(s, date)
   const rows = period ? period.hours : s.hours
-  return rows.find((h) => h.weekday === date.getDay())
+  return rows.find((h) => h.weekday === inZone(date).getDay())
 }
 
 /** "16:00"–"02:00" runs into the next day; equal times are not a day at all. */
@@ -66,7 +67,7 @@ export const isOvernight = (row) => !!row && !row.isClosed && row.close <= row.o
 export function windowFor(date, schedule) {
   const row = rowFor(schedule, date)
   if (!row || row.isClosed || row.open === row.close) return null
-  const day = startOfDay(date)
+  const day = startOfDay(inZone(date))
   const open = at(day, row.open)
   const overnight = row.close < row.open
   const close = at(overnight ? addDays(day, 1) : day, row.close)
@@ -82,7 +83,7 @@ export function windowFor(date, schedule) {
  * @returns {Date} start of that day
  */
 export function businessDayOf(instant, schedule) {
-  const t = new Date(instant)
+  const t = inZone(instant)
   const today = startOfDay(t)
   const yesterday = windowFor(addDays(today, -1), schedule)
   if (yesterday && t < yesterday.close) return yesterday.day
@@ -97,7 +98,7 @@ export const sameBusinessDay = (instant, date, schedule) =>
  * The day it starts on, or the evening before it, when that ran late.
  */
 export function isWithinHours(start, end, schedule) {
-  const s = new Date(start)
+  const s = inZone(start)
   const e = new Date(end)
   for (const day of [startOfDay(s), addDays(startOfDay(s), -1)]) {
     const w = windowFor(day, schedule)
@@ -129,7 +130,7 @@ export function weekSpan(schedule) {
 
 /** Is the business open at this instant? For the "open now" line. */
 export function openAt(instant, schedule) {
-  const t = new Date(instant)
+  const t = inZone(instant)
   for (const day of [startOfDay(t), addDays(startOfDay(t), -1)]) {
     const w = windowFor(day, schedule)
     if (w && t >= w.open && t < w.close) return w

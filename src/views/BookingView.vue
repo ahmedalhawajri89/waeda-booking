@@ -31,6 +31,7 @@ import { business, initialOf } from '@/data/business'
 import { isConflict } from '@/data/errors'
 import { isDemoBackend } from '@/data/repository'
 import { useGuestBusiness } from '@/composables/useGuestBusiness'
+import { inZone, nowInZone } from '@/lib/zone'
 import { usePhoneCode } from '@/composables/usePhoneCode'
 import { groupByPeriod, useGuestAvailability } from '@/composables/useGuestAvailability'
 import { duration, fullDate, money, time } from '@/lib/format'
@@ -62,7 +63,8 @@ const ANY = 'any'
 /* ------------------------------------------------------------------ state */
 const serviceId = ref(null)
 const who = ref(ANY)
-const date = ref(startOfDay(new Date()))
+// Days are the business's days (lib/zone), not the visitor's.
+const date = ref(startOfDay(nowInZone()))
 const startAt = ref(null)
 const name = ref('')
 const phone = ref('')
@@ -166,7 +168,7 @@ const sessionList = computed(() =>
 const sessionDays = computed(() => {
   const days = new Map()
   for (const s of sessionList.value) {
-    const key = s.startAt.slice(0, 10)
+    const key = format(inZone(s.startAt), 'yyyy-MM-dd')
     if (!days.has(key)) days.set(key, { key, label: fullDate(s.startAt), items: [] })
     days.get(key).items.push(s)
   }
@@ -326,7 +328,7 @@ onMounted(async () => {
       serviceId.value = d.serviceId
       who.value = d.who ?? ANY
       durationMin.value = d.durationMin ?? null
-      date.value = new Date(d.date)
+      date.value = startOfDay(inZone(d.date))
       startAt.value = d.startAt ?? null
       name.value = d.name || name.value
       phone.value = d.phone || phone.value
@@ -503,9 +505,9 @@ const shareUrl = computed(() => {
 })
 
 const dayTitle = computed(() =>
-  isSameDay(date.value, new Date())
+  isSameDay(date.value, nowInZone())
     ? 'اليوم'
-    : isSameDay(date.value, addDays(new Date(), 1))
+    : isSameDay(date.value, addDays(nowInZone(), 1))
       ? 'غداً'
       : format(date.value, 'EEEE d MMMM', { locale: ar }),
 )
@@ -772,9 +774,9 @@ const dayTitle = computed(() =>
               أقرب موعد:
               <span data-numeric
                 >{{
-                  isSameDay(nearest.day, new Date())
+                  isSameDay(nearest.day, nowInZone())
                     ? 'اليوم'
-                    : isSameDay(nearest.day, addDays(new Date(), 1))
+                    : isSameDay(nearest.day, addDays(nowInZone(), 1))
                       ? 'غداً'
                       : format(nearest.day, 'EEEE', { locale: ar })
                 }}

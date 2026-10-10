@@ -2,6 +2,7 @@ import { addMinutes, isBefore } from 'date-fns'
 import { time } from './format'
 import { rowFor, windowFor } from './hours'
 import { priceFor } from './pricing'
+import { iso } from './zone'
 import { serviceById } from '@/data/catalog'
 
 /** Statuses that occupy their slot. Cancelled and no-show release the time. */
@@ -87,8 +88,9 @@ export function generateSlots(opts) {
     )
 
     slots.push({
-      startAt: start.toISOString(),
-      endAt: end.toISOString(),
+      // Plain UTC strings: the window's dates may be on the business's clock.
+      startAt: iso(start),
+      endAt: iso(end),
       label: time(start),
       // Shown under the time when it differs (the peak): the price is the time's.
       priceMinor: priceFor(service, start, durationMin, hours),

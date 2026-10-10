@@ -6,6 +6,7 @@ import { isDemoBackend } from '@/data/repository'
 import { generateSlots } from '@/lib/availability'
 import { windowFor } from '@/lib/hours'
 import { seatsTaken, upcomingSessions } from '@/lib/sessions'
+import { inZone, nowInZone } from '@/lib/zone'
 
 /** How far ahead a guest can look, and how far the busy lookup reaches. */
 export const SEARCH_DAYS = 28
@@ -22,7 +23,7 @@ export const PERIODS = [
 export const groupByPeriod = (slots) =>
   PERIODS.map((p) => ({
     ...p,
-    slots: slots.filter((s) => p.test(new Date(s.startAt).getHours())),
+    slots: slots.filter((s) => p.test(inZone(s.startAt).getHours())),
   })).filter((p) => p.slots.length)
 
 /**
@@ -55,9 +56,9 @@ export function useGuestAvailability() {
   async function loadBusy(resources) {
     if (isDemoBackend || !resources.length) return
     const { busyRanges } = await import('@/data/api/public')
-    const from = format(new Date(), 'yyyy-MM-dd')
+    const from = format(nowInZone(), 'yyyy-MM-dd')
     // A day past the window, for the last evening's hours after midnight.
-    const to = format(addDays(new Date(), SEARCH_DAYS + 1), 'yyyy-MM-dd')
+    const to = format(addDays(nowInZone(), SEARCH_DAYS + 1), 'yyyy-MM-dd')
     const next = {}
     await Promise.all(
       resources.map(async (r) => {
@@ -121,7 +122,7 @@ export function useGuestAvailability() {
   function nearest(q) {
     if (!q.service) return null
     for (let i = 0; i < SEARCH_DAYS; i++) {
-      const day = addDays(startOfDay(new Date()), i)
+      const day = addDays(startOfDay(nowInZone()), i)
       const slot = slotsOn(day, q).find((x) => x.state === 'available')
       if (slot) return { day, slot }
     }
@@ -136,8 +137,8 @@ export function useGuestAvailability() {
     if (isDemoBackend || !service) return
     const { classSeats } = await import('@/data/api/public')
     try {
-      const from = format(new Date(), 'yyyy-MM-dd')
-      const to = format(addDays(new Date(), SEARCH_DAYS + 1), 'yyyy-MM-dd')
+      const from = format(nowInZone(), 'yyyy-MM-dd')
+      const to = format(addDays(nowInZone(), SEARCH_DAYS + 1), 'yyyy-MM-dd')
       seats.value = { ...seats.value, [service.id]: await classSeats(service.id, from, to) }
     } catch {
       seats.value = { ...seats.value, [service.id]: [] }

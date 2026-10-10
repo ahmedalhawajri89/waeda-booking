@@ -1,4 +1,6 @@
 import { reactive } from 'vue'
+import { setBusinessZone } from '@/lib/zone'
+import { currentPublicOrg } from '@/data/api/client'
 
 /**
  * The business a page is about: who, what kind of place, and where.
@@ -45,4 +47,9 @@ export function applyBusiness(b) {
   business.slug = next.slug
   business.category = next.category ?? ''
   business.address = next.address ?? ''
+  // A guest page computes and shows times on the business's wall clock (see
+  // lib/zone). The console stays on the browser's for now: its calendar grids
+  // place bookings by local hours, and labels on another clock would not line
+  // up with them.
+  setBusinessZone(currentPublicOrg() ? (b?.timezone ?? null) : null)
 }

@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { addDays, format, isSameDay, startOfDay } from 'date-fns'
 import { ar } from 'date-fns/locale'
+import { nowInZone } from '@/lib/zone'
 import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
 
 /**
@@ -17,7 +18,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:modelValue'])
 
-const today = startOfDay(new Date())
+const today = startOfDay(nowInZone())
 const page = ref(0)
 
 // Keep the chosen day on screen when it is set from outside ("nearest time").

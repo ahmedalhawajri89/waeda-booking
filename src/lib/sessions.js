@@ -1,5 +1,6 @@
 import { addDays, addMinutes, set, startOfDay } from 'date-fns'
 import { isWithinHours } from './hours'
+import { inZone, iso } from './zone'
 
 /**
  * A class's upcoming sessions, and how full each one is.
@@ -44,7 +45,7 @@ export function upcomingSessions(service, opts) {
   if (!isGroup(service) || !service.sessions?.length) return []
   const { days = 28, schedule = [], takenFor, resources } = opts
   const now = opts.now ?? new Date()
-  const from = startOfDay(opts.from ?? now)
+  const from = startOfDay(inZone(opts.from ?? now))
   const allowed = resources ? new Set(resources.map((r) => r.id)) : null
   const out = []
   for (let i = 0; i < days; i++) {
@@ -58,11 +59,11 @@ export function upcomingSessions(service, opts) {
       const end = addMinutes(start, service.durationMin + service.bufferMin)
       // A session the business is closed for that day (a holiday) is not offered.
       if (!isWithinHours(start, end, schedule)) continue
-      const startAt = start.toISOString()
+      const startAt = iso(start)
       const taken = takenFor(s.resourceId, startAt)
       out.push({
         startAt,
-        endAt: end.toISOString(),
+        endAt: iso(end),
         resourceId: s.resourceId,
         taken,
         capacity: service.capacity,

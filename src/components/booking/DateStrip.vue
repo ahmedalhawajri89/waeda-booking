@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { addDays, format, isSameDay, startOfDay } from 'date-fns'
 import { ar } from 'date-fns/locale'
+import { nowInZone } from '@/lib/zone'
 import { isOpenOn } from '@/lib/availability'
 import { schedule } from '@/data/catalog'
 
@@ -15,7 +16,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue'])
 
-const today = startOfDay(new Date())
+const today = startOfDay(nowInZone())
 const dates = computed(() =>
   Array.from({ length: props.days }, (_, i) => addDays(startOfDay(props.from ?? today), i)),
 )

@@ -51,6 +51,9 @@ class CatalogController extends Controller
                 'slug' => $business?->slug ?? '',
                 'category' => $business?->category ?? '',
                 'address' => $business?->address ?? '',
+                // The clock its hours are kept in: the booking page shows and
+                // computes times in it, wherever the guest happens to be.
+                'timezone' => $business?->timezone ?? 'UTC',
             ],
             'services' => $services->map(fn (Service $s) => [
                 'id' => $s->id,
