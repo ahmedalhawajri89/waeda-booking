@@ -75,7 +75,10 @@ class BookingAcknowledgeTest extends TestCase
 
     private function guestView(Booking $b): array
     {
-        return $this->getJson("/api/public/bookings/{$b->reference}?phone=0501234567")->assertOk()->json();
+        $proof = $this->phoneToken('0501234567');
+
+        return $this->getJson("/api/public/bookings/{$b->reference}?phone=0501234567&verificationToken={$proof}")
+            ->assertOk()->json();
     }
 
     public function test_a_guest_booking_waits_to_be_seen(): void
@@ -145,7 +148,7 @@ class BookingAcknowledgeTest extends TestCase
         $this->app['auth']->forgetGuards();
 
         $this->postJson("/api/public/bookings/{$b->reference}/reschedule", [
-            'phone' => '0501234567',
+            'phone' => '0501234567', 'verificationToken' => $this->phoneToken('0501234567'),
             'startAt' => $this->slot('14:00')->toIso8601String(),
         ])->assertOk()->assertJsonPath('acknowledgedAt', null);
 

@@ -31,7 +31,7 @@ export function verifyPhoneCode(phone, code) {
  * @param {{ serviceId: string, resourceId: string, startAt: string,
  *           name: string, phone: string, email?: string, notes?: string,
  *           verificationToken?: string }} input
- * @returns {Promise<{ id: string, reference: string }>}
+ * @returns {Promise<{ id: string, reference: string, manageToken: string }>}
  */
 export function bookPublic(input) {
   return request('/public/bookings', { method: 'POST', body: input, auth: false })
@@ -54,29 +54,33 @@ export function busyRanges(resourceId, from, to) {
   return request('/public/availability?' + q, { auth: false })
 }
 
-/** Reference plus the phone it was booked with — one factor is not enough. */
-export function lookupBooking(reference, phone) {
-  return request(
-    `/public/bookings/${encodeURIComponent(reference)}?phone=${encodeURIComponent(phone)}`,
-    {
-      auth: false,
-    },
-  )
+/**
+ * What proves a booking is the caller's: the secret from its manage link, or
+ * the phone it was booked with together with the token from verifying it.
+ * The reference alone, or a phone alone, is never enough.
+ * @typedef {{ token: string } | { phone: string, verificationToken: string }} BookingProof
+ */
+
+/** @param {string} reference @param {BookingProof} proof */
+export function lookupBooking(reference, proof) {
+  const q = new URLSearchParams(proof)
+  return request(`/public/bookings/${encodeURIComponent(reference)}?${q}`, { auth: false })
 }
 
-export function cancelBooking(reference, phone) {
+/** @param {string} reference @param {BookingProof} proof */
+export function cancelBooking(reference, proof) {
   return request(`/public/bookings/${encodeURIComponent(reference)}/cancel`, {
     method: 'POST',
-    body: { phone },
+    body: proof,
     auth: false,
   })
 }
 
 /** Move your own booking; the server keeps the service and the person. */
-export function rescheduleBooking(reference, phone, startAt) {
+export function rescheduleBooking(reference, proof, startAt) {
   return request(`/public/bookings/${encodeURIComponent(reference)}/reschedule`, {
     method: 'POST',
-    body: { phone, startAt },
+    body: { ...proof, startAt },
     auth: false,
   })
 }

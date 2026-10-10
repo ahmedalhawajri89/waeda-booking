@@ -13,6 +13,7 @@ use App\Services\PhoneVerification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * The three things a visitor with no account can do.
@@ -36,11 +37,15 @@ class PublicBookingController extends Controller
      */
     public const CHANGE_CUTOFF_MIN = 120;
 
-    public function __construct(private BookingWriter $writer, private BookingRules $rules)
+    public function __construct(
+        private BookingWriter $writer,
+        private BookingRules $rules,
+        private PhoneVerification $verification,
+    )
     {
     }
 
-    public function store(Request $request, PhoneVerification $verification)
+    public function store(Request $request)
     {
         $data = $request->validate([
             'serviceId' => ['required', 'string'],
@@ -63,7 +68,7 @@ class PublicBookingController extends Controller
         }
         // The phone is the customer's identity: it finds their record and
         // their history. Booking under it needs proof of holding it.
-        if (! $verification->holds($org, $data['phone'], $data['verificationToken'] ?? null)) {
+        if (! $this->verification->holds($org, $data['phone'], $data['verificationToken'] ?? null)) {
             return response()->json(['error' => 'phone_not_verified'], 422);
         }
 
@@ -100,10 +105,16 @@ class PublicBookingController extends Controller
                 'duration_min' => $duration,
             ]);
 
+            // The secret for the "manage your booking" link. Shown once, here;
+            // only its hash is kept.
+            $manageToken = Str::random(40);
+            $booking->forceFill(['manage_token_hash' => hash('sha256', $manageToken)])->save();
+
             // The price the server settled on, so the page never shows its own guess.
             return response()->json([
                 'id' => $booking->id,
                 'reference' => $booking->reference,
+                'manageToken' => $manageToken,
                 'priceMinor' => $booking->price_minor,
                 'endAt' => $booking->end_at->toIso8601String(),
             ], 201);
@@ -223,18 +234,23 @@ class PublicBookingController extends Controller
         ]);
     }
 
+    /** What proves a guest owns a booking: the link's token, or a verified phone. */
+    private const PROOF = [
+        'token' => ['nullable', 'string', 'max:64'],
+        'phone' => ['nullable', 'string', 'max:64'],
+        'verificationToken' => ['nullable', 'string', 'max:64'],
+    ];
+
     /**
      * Look up a booking by its reference.
      *
-     * Two factors, always. BK-2026-0431 is sequential and trivially guessable,
-     * so a lookup keyed on the reference alone would expose every booking to
-     * anyone who can count. Only the fields the customer-facing page renders
-     * come back.
+     * The reference is never enough: BK-2026-0431 is sequential and trivially
+     * guessable. Only the fields the customer-facing page renders come back.
      */
     public function show(Request $request, string $reference)
     {
-        $data = $request->validate(['phone' => ['required', 'string', 'max:64']]);
-        $booking = $this->findByReferenceAndPhone($request, $reference, $data['phone']);
+        $request->validate(self::PROOF);
+        $booking = $this->findOwned($request, $reference);
 
         if (! $booking) {
             return response()->json(['error' => 'not_found'], 404);
@@ -264,8 +280,8 @@ class PublicBookingController extends Controller
     /** Cancel your own booking from that same page. */
     public function cancel(Request $request, string $reference)
     {
-        $data = $request->validate(['phone' => ['required', 'string', 'max:64']]);
-        $booking = $this->findByReferenceAndPhone($request, $reference, $data['phone']);
+        $request->validate(self::PROOF);
+        $booking = $this->findOwned($request, $reference);
 
         if (! $booking || ! $this->changeable($booking)) {
             return response()->json(['error' => 'not_cancellable'], 404);
@@ -286,11 +302,8 @@ class PublicBookingController extends Controller
      */
     public function reschedule(Request $request, string $reference)
     {
-        $data = $request->validate([
-            'phone' => ['required', 'string', 'max:64'],
-            'startAt' => ['required', 'date'],
-        ]);
-        $booking = $this->findByReferenceAndPhone($request, $reference, $data['phone']);
+        $data = $request->validate(self::PROOF + ['startAt' => ['required', 'date']]);
+        $booking = $this->findOwned($request, $reference);
 
         if (! $booking || ! $this->changeable($booking)) {
             return response()->json(['error' => 'not_changeable'], 404);
@@ -330,18 +343,30 @@ class PublicBookingController extends Controller
             && $booking->start_at->greaterThan(now()->addMinutes(self::CHANGE_CUTOFF_MIN));
     }
 
-    private function findByReferenceAndPhone(Request $request, string $reference, string $phone): ?Booking
+    /**
+     * The booking, if the caller proves it is theirs: the random token from
+     * the confirmation link, or the whole phone it was booked with together
+     * with the token from verifying that phone by code. A phone alone is not
+     * proof — phone numbers are not secret, and the last four digits even less.
+     */
+    private function findOwned(Request $request, string $reference): ?Booking
     {
-        $last4 = substr(Customer::normalisePhone($phone), -4);
-        if (strlen($last4) < 4) {
+        $org = $this->publicOrgId($request);
+        // References count per business, so the business is part of the key.
+        $query = Booking::with(['service', 'customer', 'resource'])
+            ->where('org_id', $org)
+            ->whereRaw('upper(reference) = ?', [strtoupper(trim($reference))]);
+
+        if ($token = $request->input('token')) {
+            return $query->where('manage_token_hash', hash('sha256', (string) $token))->first();
+        }
+
+        $phone = (string) $request->input('phone', '');
+        if (! $this->verification->holds($org, $phone, $request->input('verificationToken'))) {
             return null;
         }
 
-        // References count per business, so the business is part of the key.
-        return Booking::with(['service', 'customer', 'resource'])
-            ->where('org_id', $this->publicOrgId($request))
-            ->whereRaw('upper(reference) = ?', [strtoupper(trim($reference))])
-            ->whereHas('customer', fn ($q) => $q->whereRaw('right(phone_digits, 4) = ?', [$last4]))
+        return $query->whereHas('customer', fn ($q) => $q->where('phone_digits', Customer::normalisePhone($phone)))
             ->first();
     }
 }

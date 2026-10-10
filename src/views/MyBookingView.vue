@@ -31,6 +31,8 @@ import { business } from '@/data/business'
 import { isConflict } from '@/data/errors'
 import { isDemoBackend } from '@/data/repository'
 import { useGuestBusiness } from '@/composables/useGuestBusiness'
+import { usePhoneCode } from '@/composables/usePhoneCode'
+import CodeInput from '@/components/booking/CodeInput.vue'
 import {
   groupByPeriod,
   SEARCH_DAYS,
@@ -44,9 +46,11 @@ import { rememberGuest, rememberedGuest, samePhone } from '@/lib/guestIdentity'
 /**
  * The customer's own booking: see it, keep it, move it, or let it go.
  *
- * No account. Ownership is the reference (in the link) plus the phone it was
- * booked with; a device that has booked before already knows the phone, so the
- * page opens straight onto the booking. Moving the appointment is the main
+ * No account. Against the API, ownership is proven one of three ways: the
+ * secret in the link the confirmation gave (`?t=`), a phone this device
+ * already verified by code, or a code sent now to the phone typed in. The
+ * reference and a phone number on their own prove nothing — neither is a
+ * secret. Moving the appointment is the main
  * action on purpose: someone who can no longer make it should change the time
  * rather than not turn up.
  */
@@ -111,34 +115,85 @@ function phoneMatches(entered) {
   return digits.length >= 9 && stored.endsWith(digits.slice(-9))
 }
 
+/** What the API accepted as proof, reused to move or cancel. */
+const proof = ref(null)
+const linkToken = computed(() => (typeof route.query.t === 'string' ? route.query.t : null))
+
+/** Opens the booking with this proof; false when the server says no. */
+async function open(p, quiet) {
+  try {
+    const { lookupBooking } = await import('@/data/api/public')
+    remote.value = await lookupBooking(reference.value, p)
+    proof.value = p
+    verified.value = true
+    return true
+  } catch {
+    // One message for "no such reference" and "not yours", deliberately:
+    // telling them apart would let anyone discover which references exist.
+    if (!quiet) toast.error('رقم الجوال لا يطابق هذا الحجز')
+    return false
+  }
+}
+
+/* A code to the phone typed in, when this device has not verified it. */
+const code = usePhoneCode()
+const askingCode = ref(false)
+const codeError = ref(false)
+const codeBox = ref(null)
+
 async function verify(entered = phone.value, quiet = false) {
   attempted.value = !quiet
   checking.value = true
   try {
     if (isDemoBackend) {
-      if (!phoneMatches(entered)) throw new Error('mismatch')
-    } else {
-      const { lookupBooking } = await import('@/data/api/public')
-      remote.value = await lookupBooking(reference.value, entered)
+      if (!phoneMatches(entered)) {
+        if (!quiet) toast.error('رقم الجوال لا يطابق هذا الحجز')
+        return
+      }
+      phone.value = entered
+      verified.value = true
+      rememberGuest(view.value?.customerName ?? '', entered)
+      return
     }
+    const known = rememberedGuest()
+    if (known?.token && samePhone(known.phone, entered)) {
+      phone.value = entered
+      if (await open({ phone: entered, verificationToken: known.token }, quiet)) return
+      if (quiet) return
+    }
+    if (quiet) return
     phone.value = entered
-    verified.value = true
-    rememberGuest(view.value?.customerName ?? '', entered)
-  } catch {
-    // One message for "no such reference" and "wrong phone", deliberately:
-    // telling them apart would let anyone discover which references exist.
-    if (!quiet) toast.error('رقم الجوال لا يطابق هذا الحجز')
+    codeError.value = false
+    askingCode.value = await code.send(entered)
   } finally {
     checking.value = false
   }
 }
 
+async function onCode(entered) {
+  const token = await code.verify(phone.value, entered).catch(() => null)
+  if (!token) {
+    codeError.value = true
+    codeBox.value?.clear()
+    return
+  }
+  rememberGuest(rememberedGuest()?.name ?? '', phone.value, token)
+  askingCode.value = false
+  checking.value = true
+  await open({ phone: phone.value, verificationToken: token }, false)
+  checking.value = false
+}
+
 onMounted(async () => {
   await settings.load(!isDemoBackend && !!slug.value)
   if (isDemoBackend) await Promise.all([bookings.load(), customers.load()])
+  if (!isDemoBackend && linkToken.value) {
+    // The link from the confirmation: proof on its own.
+    await open({ token: linkToken.value }, true)
+  }
   // A device that has booked before already proved its phone.
   const known = rememberedGuest()
-  if (known && exists.value) await verify(known.phone, true)
+  if (!verified.value && known && exists.value) await verify(known.phone, true)
   ready.value = true
 })
 
@@ -184,7 +239,9 @@ const RECEIPT = computed(() => {
 })
 
 /* ---------------------------------------------------------- keep it */
-const manageUrl = computed(() => `${window.location.origin}${managePath(reference.value)}`)
+const manageUrl = computed(
+  () => `${window.location.origin}${managePath(reference.value, linkToken.value)}`,
+)
 
 function addToCalendar() {
   const v = view.value
@@ -276,7 +333,7 @@ async function saveMove() {
         throw { status: 409 }
     } else {
       const { rescheduleBooking } = await import('@/data/api/public')
-      const moved = await rescheduleBooking(v.reference, phone.value, newStart.value)
+      const moved = await rescheduleBooking(v.reference, proof.value, newStart.value)
       remote.value = {
         ...remote.value,
         startAt: moved.startAt,
@@ -313,7 +370,7 @@ async function cancel() {
       bookings.setStatus(v.id, 'cancelled')
     } else {
       const { cancelBooking } = await import('@/data/api/public')
-      await cancelBooking(v.reference, phone.value)
+      await cancelBooking(v.reference, proof.value)
       remote.value = { ...remote.value, status: 'cancelled' }
     }
     askCancel.value = false
@@ -371,7 +428,24 @@ function moveInstead() {
         <p class="text-fg-muted mb-6 text-sm leading-relaxed">
           أدخل رقم الجوال الذي حجزت به لعرض الحجز وإدارته.
         </p>
-        <form class="space-y-4" @submit.prevent="verify()">
+        <div v-if="askingCode" class="space-y-3 text-center">
+          <p class="text-fg text-sm font-bold">
+            أدخل الرمز المرسل إلى <span dir="ltr">{{ phone }}</span>
+          </p>
+          <CodeInput ref="codeBox" :invalid="codeError" @complete="onCode" />
+          <p v-if="codeError" class="text-danger-700 text-sm" role="alert">
+            الرمز غير صحيح. حاول مرة أخرى.
+          </p>
+          <div class="text-fg-subtle text-sm">
+            <span v-if="code.resendIn.value > 0" data-numeric>
+              إعادة الإرسال بعد {{ code.resendIn.value }} ثانية
+            </span>
+            <button v-else type="button" class="text-fg font-semibold underline" @click="verify()">
+              أعد إرسال الرمز
+            </button>
+          </div>
+        </div>
+        <form v-else class="space-y-4" @submit.prevent="verify()">
           <BaseInput
             v-model="phone"
             label="رقم الجوال"

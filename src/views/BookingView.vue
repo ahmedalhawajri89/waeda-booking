@@ -73,6 +73,8 @@ const touched = ref(false)
 const stage = ref('form')
 const submitting = ref(false)
 const reference = ref(null)
+/** The secret in the manage link; the API's only. */
+const manageToken = ref(null)
 const booked = ref(null)
 
 const returning = ref(rememberedGuest())
@@ -433,6 +435,7 @@ async function book() {
         verificationToken: returning.value?.token ?? undefined,
       })
       reference.value = created.reference
+      manageToken.value = created.manageToken ?? null
       // The server's price, not this page's estimate.
       booked.value = {
         startAt: created.startAt ?? startAt.value,
@@ -470,7 +473,9 @@ async function book() {
 
 /* -------------------------------------------------------- after booking */
 const manageUrl = computed(() =>
-  reference.value ? `${window.location.origin}${managePath(reference.value)}` : '',
+  reference.value
+    ? `${window.location.origin}${managePath(reference.value, manageToken.value)}`
+    : '',
 )
 
 function addToCalendar() {
@@ -551,7 +556,7 @@ const dayTitle = computed(() =>
         </a>
       </div>
       <RouterLink
-        :to="managePath(reference)"
+        :to="managePath(reference, manageToken)"
         class="btn-brand mt-2.5 flex items-center justify-center rounded-[var(--radius-md)] py-3 text-sm font-bold"
       >
         إدارة الحجز

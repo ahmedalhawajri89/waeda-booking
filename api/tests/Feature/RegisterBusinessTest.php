@@ -130,19 +130,20 @@ class RegisterBusinessTest extends TestCase
         $staff = Resource::where('org_id', $org->id)->firstOrFail();
         $start = Carbon::now('Asia/Riyadh')->next(Carbon::SUNDAY)->setTime(11, 0);
 
-        $reference = $this->withHeader('X-Org', 'lamsa')->postJson('/api/public/bookings', [
+        $booked = $this->withHeader('X-Org', 'lamsa')->postJson('/api/public/bookings', [
             'serviceId' => $service->id, 'resourceId' => $staff->id,
             'startAt' => $start->toIso8601String(), 'name' => 'نوف', 'phone' => '0551234567',
             'verificationToken' => $this->phoneToken('0551234567', $org->id),
-        ])->assertCreated()->json('reference');
+        ])->assertCreated();
+        [$reference, $manage] = [$booked->json('reference'), $booked->json('manageToken')];
 
         $this->assertSame($org->id, Booking::where('reference', $reference)->value('org_id'));
 
         // Looked up on its own business it is found; named as another, it is not.
         $this->withHeader('X-Org', 'lamsa')
-            ->getJson("/api/public/bookings/{$reference}?phone=0551234567")->assertOk();
+            ->getJson("/api/public/bookings/{$reference}?token={$manage}")->assertOk();
         $this->withHeader('X-Org', 'existing')
-            ->getJson("/api/public/bookings/{$reference}?phone=0551234567")->assertNotFound();
+            ->getJson("/api/public/bookings/{$reference}?token={$manage}")->assertNotFound();
     }
 
     public function test_a_header_cannot_point_an_operator_write_at_another_business(): void

@@ -62,6 +62,14 @@ class PublicBookingTest extends TestCase
         return Carbon::now('Asia/Riyadh')->addWeek()->startOfDay()->setTimeFromTimeString($time);
     }
 
+    /** A guest books; the reference and the secret from their manage link. */
+    private function guestBooks(array $overrides = []): array
+    {
+        $r = $this->postJson('/api/public/bookings', $this->payload($overrides))->assertCreated();
+
+        return [$r->json('reference'), $r->json('manageToken')];
+    }
+
     private function payload(array $overrides = []): array
     {
         $payload = array_merge([
@@ -201,10 +209,10 @@ class PublicBookingTest extends TestCase
 
     public function test_availability_ignores_a_released_booking(): void
     {
-        $reference = $this->postJson('/api/public/bookings', $this->payload())->json('reference');
+        [$reference, $manage] = $this->guestBooks();
         $day = $this->futureSlot()->toDateString();
 
-        $this->postJson("/api/public/bookings/{$reference}/cancel", ['phone' => '0501234567'])->assertOk();
+        $this->postJson("/api/public/bookings/{$reference}/cancel", ['token' => $manage])->assertOk();
 
         // Cancelled releases its time, matching BLOCKING on the client.
         $this->getJson("/api/public/availability?resourceId={$this->room->id}&from={$day}&to={$day}")
@@ -238,9 +246,9 @@ class PublicBookingTest extends TestCase
 
     public function test_a_booking_can_be_looked_up_with_the_reference_and_phone(): void
     {
-        $reference = $this->postJson('/api/public/bookings', $this->payload())->json('reference');
+        [$reference, $manage] = $this->guestBooks();
 
-        $this->getJson("/api/public/bookings/{$reference}?phone=0501234567")
+        $this->getJson("/api/public/bookings/{$reference}?token={$manage}")
             ->assertOk()
             ->assertJsonPath('customerName', 'ريم الدوسري')
             ->assertJsonPath('serviceName', 'Consultation');
@@ -248,19 +256,38 @@ class PublicBookingTest extends TestCase
 
     public function test_the_reference_alone_is_not_enough(): void
     {
-        // BK-2026-0431 is sequential and trivially guessable. One factor would
-        // expose every booking to anyone who can count.
-        $reference = $this->postJson('/api/public/bookings', $this->payload())->json('reference');
+        // BK-2026-0431 is sequential and trivially guessable, and a phone
+        // number is not a secret: neither opens a booking without proof.
+        [$reference] = $this->guestBooks();
 
-        $this->getJson("/api/public/bookings/{$reference}?phone=0000000000")->assertNotFound();
-        $this->getJson("/api/public/bookings/{$reference}")->assertStatus(422);
+        $this->getJson("/api/public/bookings/{$reference}")->assertNotFound();
+        $this->getJson("/api/public/bookings/{$reference}?phone=0501234567")->assertNotFound();
+        $this->getJson("/api/public/bookings/{$reference}?token=wrong")->assertNotFound();
+    }
+
+    public function test_a_device_that_verified_the_phone_opens_its_booking_without_the_link(): void
+    {
+        [$reference] = $this->guestBooks();
+        $proof = $this->phoneToken('0501234567');
+
+        $this->getJson("/api/public/bookings/{$reference}?phone=050%20123%204567&verificationToken={$proof}")
+            ->assertOk()->assertJsonPath('reference', $reference);
+    }
+
+    public function test_a_verified_phone_opens_only_its_own_bookings(): void
+    {
+        [$reference] = $this->guestBooks();
+        $other = $this->phoneToken('0509999999');
+
+        $this->getJson("/api/public/bookings/{$reference}?phone=0509999999&verificationToken={$other}")
+            ->assertNotFound();
     }
 
     public function test_a_guest_can_cancel_their_own_booking(): void
     {
-        $reference = $this->postJson('/api/public/bookings', $this->payload())->json('reference');
+        [$reference, $manage] = $this->guestBooks();
 
-        $this->postJson("/api/public/bookings/{$reference}/cancel", ['phone' => '0501234567'])
+        $this->postJson("/api/public/bookings/{$reference}/cancel", ['token' => $manage])
             ->assertOk()->assertJsonPath('cancelled', true);
 
         $this->assertSame('cancelled', Booking::first()->status);
@@ -268,7 +295,7 @@ class PublicBookingTest extends TestCase
 
     public function test_cancelling_with_the_wrong_phone_does_nothing(): void
     {
-        $reference = $this->postJson('/api/public/bookings', $this->payload())->json('reference');
+        [$reference, $manage] = $this->guestBooks();
 
         $this->postJson("/api/public/bookings/{$reference}/cancel", ['phone' => '0000000000'])
             ->assertNotFound();
@@ -278,8 +305,8 @@ class PublicBookingTest extends TestCase
 
     public function test_cancelling_frees_the_slot(): void
     {
-        $reference = $this->postJson('/api/public/bookings', $this->payload())->json('reference');
-        $this->postJson("/api/public/bookings/{$reference}/cancel", ['phone' => '0501234567'])->assertOk();
+        [$reference, $manage] = $this->guestBooks();
+        $this->postJson("/api/public/bookings/{$reference}/cancel", ['token' => $manage])->assertOk();
 
         // The released time is bookable again, immediately.
         $this->postJson('/api/public/bookings', $this->payload(['phone' => '0509999999']))
@@ -290,11 +317,11 @@ class PublicBookingTest extends TestCase
 
     public function test_a_guest_can_move_their_own_booking(): void
     {
-        $reference = $this->postJson('/api/public/bookings', $this->payload())->json('reference');
+        [$reference, $manage] = $this->guestBooks();
         $to = $this->futureSlot('14:00');
 
         $this->postJson("/api/public/bookings/{$reference}/reschedule", [
-            'phone' => '0501234567', 'startAt' => $to->toIso8601String(),
+            'token' => $manage, 'startAt' => $to->toIso8601String(),
         ])->assertOk();
 
         $booking = Booking::first();
@@ -305,9 +332,9 @@ class PublicBookingTest extends TestCase
 
     public function test_the_lookup_carries_what_the_manage_page_needs(): void
     {
-        $reference = $this->postJson('/api/public/bookings', $this->payload())->json('reference');
+        [$reference, $manage] = $this->guestBooks();
 
-        $this->getJson("/api/public/bookings/{$reference}?phone=0501234567")
+        $this->getJson("/api/public/bookings/{$reference}?token={$manage}")
             ->assertOk()
             ->assertJsonPath('serviceId', $this->service->id)
             ->assertJsonPath('resourceId', $this->room->id)
@@ -316,7 +343,7 @@ class PublicBookingTest extends TestCase
 
     public function test_moving_with_the_wrong_phone_does_nothing(): void
     {
-        $reference = $this->postJson('/api/public/bookings', $this->payload())->json('reference');
+        [$reference, $manage] = $this->guestBooks();
 
         $this->postJson("/api/public/bookings/{$reference}/reschedule", [
             'phone' => '0000000000', 'startAt' => $this->futureSlot('14:00')->toIso8601String(),
@@ -330,32 +357,32 @@ class PublicBookingTest extends TestCase
         $this->postJson('/api/public/bookings', $this->payload([
             'startAt' => $this->futureSlot('14:00')->toIso8601String(), 'phone' => '0509999999',
         ]))->assertCreated();
-        $reference = $this->postJson('/api/public/bookings', $this->payload())->json('reference');
+        [$reference, $manage] = $this->guestBooks();
 
         $this->postJson("/api/public/bookings/{$reference}/reschedule", [
-            'phone' => '0501234567', 'startAt' => $this->futureSlot('14:00')->toIso8601String(),
+            'token' => $manage, 'startAt' => $this->futureSlot('14:00')->toIso8601String(),
         ])->assertStatus(409);
     }
 
     public function test_moving_outside_opening_hours_is_refused(): void
     {
-        $reference = $this->postJson('/api/public/bookings', $this->payload())->json('reference');
+        [$reference, $manage] = $this->guestBooks();
 
         $this->postJson("/api/public/bookings/{$reference}/reschedule", [
-            'phone' => '0501234567', 'startAt' => $this->futureSlot('20:00')->toIso8601String(),
+            'token' => $manage, 'startAt' => $this->futureSlot('20:00')->toIso8601String(),
         ])->assertStatus(422);
     }
 
     public function test_a_booking_inside_the_cutoff_cannot_be_moved_or_cancelled(): void
     {
-        $reference = $this->postJson('/api/public/bookings', $this->payload())->json('reference');
+        [$reference, $manage] = $this->guestBooks();
         // An hour before it starts: too late for the guest to change it alone.
         Carbon::setTestNow(Booking::first()->start_at->copy()->subHour());
 
         $this->postJson("/api/public/bookings/{$reference}/reschedule", [
-            'phone' => '0501234567', 'startAt' => $this->futureSlot('14:00')->toIso8601String(),
+            'token' => $manage, 'startAt' => $this->futureSlot('14:00')->toIso8601String(),
         ])->assertNotFound();
-        $this->postJson("/api/public/bookings/{$reference}/cancel", ['phone' => '0501234567'])
+        $this->postJson("/api/public/bookings/{$reference}/cancel", ['token' => $manage])
             ->assertNotFound();
 
         Carbon::setTestNow();
