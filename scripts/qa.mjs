@@ -15,7 +15,15 @@ const browser = await chromium.launch({
 })
 
 const errors = []
-const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'ar' })
+// The browser runs on the demo business's clock (Riyadh), not the machine's.
+// The demo has no server to say which zone it keeps, so the page uses the
+// browser's: on a machine elsewhere, daylight saving moved a 10:00 class into
+// the Dhuhr pause and the class step found nothing to book. QA_TZ overrides.
+const ctx = await browser.newContext({
+  viewport: { width: 1440, height: 900 },
+  locale: 'ar',
+  timezoneId: process.env.QA_TZ || 'Asia/Riyadh',
+})
 const page = await ctx.newPage()
 page.on('console', (m) => {
   const t = m.text()
