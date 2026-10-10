@@ -86,7 +86,7 @@ onMounted(() => {
 })
 
 const ACTIVITY = [
-  { key: 'sent', label: 'رسائل أرسلها الحارس' },
+  { key: 'sent', label: 'رسائل أرسلها المساعد' },
   { key: 'confirmed', label: 'أكّدوا حضورهم' },
   { key: 'cancelled', label: 'ألغوا مبكراً فأُتيح الوقت' },
   { key: 'rescheduled', label: 'أُجّلت بالمحادثة' },
@@ -183,7 +183,7 @@ const reasons = (risk) => notableFactors(risk, { raising: true, limit: 2 }).map(
           <span class="bg-success-600 relative inline-flex h-2.5 w-2.5 rounded-full" />
         </span>
         <p class="text-fg text-sm">
-          <strong class="font-semibold">الحارس يعمل</strong>
+          <strong class="font-semibold">المساعد يعمل</strong>
           <span class="text-fg-subtle">
             · يراقب <span data-numeric>{{ guard.week.length }}</span> حجزاً خلال الأيام السبعة
             القادمة، ويرسل التذكير وطلبات التأكيد وحده.</span
@@ -206,7 +206,7 @@ const reasons = (risk) => notableFactors(risk, { raising: true, limit: 2 }).map(
       <nav
         class="border-border flex gap-1 overflow-x-auto overflow-y-hidden border-b"
         role="tablist"
-        aria-label="أقسام الحارس"
+        aria-label="أقسام المساعد"
       >
         <button
           v-for="t in TABS"
@@ -239,10 +239,10 @@ const reasons = (risk) => notableFactors(risk, { raising: true, limit: 2 }).map(
         <!-- three numbers, in the order an owner asks them -->
         <section
           class="border-border bg-surface grid overflow-hidden rounded-[var(--radius-lg)] border sm:grid-cols-3"
-          aria-label="ملخص الحارس"
+          aria-label="ملخص المساعد"
         >
           <div class="border-border p-5 sm:border-e">
-            <p class="text-fg-subtle text-[13px]">حماه الحارس حتى الآن</p>
+            <p class="text-fg-subtle text-[13px]">حماه المساعد حتى الآن</p>
             <p class="font-display text-primary-fg mt-1 text-3xl font-bold" data-numeric>
               {{ money(guard.protectedRevenue.total) }}
             </p>
@@ -454,7 +454,7 @@ const reasons = (risk) => notableFactors(risk, { raising: true, limit: 2 }).map(
                 class="text-fg flex cursor-pointer list-none items-center justify-between text-sm font-bold"
               >
                 <span class="flex items-center gap-2">
-                  <Info class="text-fg-subtle h-4 w-4" aria-hidden="true" /> كيف يحسب الحارس الخطر؟
+                  <Info class="text-fg-subtle h-4 w-4" aria-hidden="true" /> كيف يحسب المساعد الخطر؟
                 </span>
                 <ChevronDown
                   class="text-fg-faint h-4 w-4 transition-transform group-open:rotate-180"
@@ -480,7 +480,7 @@ const reasons = (risk) => notableFactors(risk, { raising: true, limit: 2 }).map(
         <!-- what the guard has handled on its own, in one quiet line -->
         <dl
           class="text-fg-subtle flex flex-wrap items-center gap-x-5 gap-y-1 text-xs"
-          aria-label="نشاط الحارس"
+          aria-label="نشاط المساعد"
         >
           <div v-for="k in ACTIVITY" :key="k.key" class="flex items-baseline gap-1.5">
             <dd class="text-fg text-sm font-bold" data-numeric>{{ guard.activity[k.key] }}</dd>

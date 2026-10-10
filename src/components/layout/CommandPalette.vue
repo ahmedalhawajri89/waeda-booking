@@ -68,7 +68,7 @@ const PAGES = [
   { label: 'التقويم', icon: CalendarDays, run: go('/app/calendar') },
   { label: 'الحجوزات', icon: ListChecks, run: go('/app/bookings') },
   { label: 'العملاء', icon: Users, run: go('/app/customers') },
-  { label: 'حارس المواعيد', icon: ShieldCheck, run: go('/app/guard') },
+  { label: 'مساعد الحضور', icon: ShieldCheck, run: go('/app/guard') },
   { label: 'التحليلات', icon: BarChart3, run: go('/app/analytics') },
   { label: 'الإعدادات', icon: Settings, run: go('/app/settings') },
 ]

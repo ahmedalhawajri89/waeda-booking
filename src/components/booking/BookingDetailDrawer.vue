@@ -602,7 +602,7 @@ const CHANNEL = { online: 'من صفحة الحجز', phone: 'حجز هاتفي'
               >{{ f.delta > 0 ? '↑' : '↓' }} {{ f.label }}</span
             >
           </p>
-          <p class="text-fg-subtle text-xs">الحارس سيفعل: {{ plan.join('، ثم ') }}</p>
+          <p class="text-fg-subtle text-xs">المساعد سيفعل: {{ plan.join('، ثم ') }}</p>
         </section>
 
         <!-- notes -->

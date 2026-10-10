@@ -127,7 +127,7 @@ const SECTIONS = computed(() => [
       { to: '/app/customers', label: 'العملاء', icon: Users },
       {
         to: '/app/guard',
-        label: 'حارس المواعيد',
+        label: 'مساعد الحضور',
         icon: ShieldCheck,
         badge: staffCount.value,
         tone: 'signal',
@@ -189,7 +189,7 @@ const ACCOUNT_ITEMS = computed(() => [
 /** The phone's "more": everything the bottom bar has no room for. */
 const MORE_ITEMS = computed(() => [
   { value: 'customers', label: 'العملاء', icon: Users },
-  { value: 'guard', label: 'حارس المواعيد', icon: ShieldCheck },
+  { value: 'guard', label: 'مساعد الحضور', icon: ShieldCheck },
   { value: 'analytics', label: 'التحليلات', icon: BarChart3 },
   { value: 'settings', label: 'الإعدادات', icon: Settings },
   { value: 'link', label: 'نسخ رابط صفحة الحجز', icon: Link2, separated: true },

@@ -177,7 +177,7 @@ const shareUrl = computed(
           class="border-border bg-surface hover:border-border-strong hidden rounded-[var(--radius-lg)] border px-4 py-3 transition-colors sm:block"
         >
           <dt class="text-fg-subtle flex items-center gap-1 text-xs">
-            <ShieldCheck class="text-primary-fg h-3.5 w-3.5" aria-hidden="true" /> حماه الحارس
+            <ShieldCheck class="text-primary-fg h-3.5 w-3.5" aria-hidden="true" /> حماه المساعد
           </dt>
           <dd class="font-display text-fg mt-0.5 text-xl font-bold" data-numeric>
             {{ money(protectedTotal) }}

@@ -113,7 +113,7 @@ const KPIS = computed(() => [
 
 const STEPS = [
   { icon: CalendarX2, title: 'يُلغى موعد', body: 'أو يُحرَّر لأن صاحبه لم يؤكد' },
-  { icon: Send, title: 'يعرضه الحارس', body: 'على 3: المنتظرين أولاً ثم المعتادين' },
+  { icon: Send, title: 'يعرضه المساعد', body: 'على 3: المنتظرين أولاً ثم المعتادين' },
   { icon: UserCheck, title: 'أول من يقبل', body: 'يُحجز له تلقائياً، ويُبلَّغ الباقون' },
   { icon: Sparkles, title: 'لا يضيع الدخل', body: 'الموعد الملغى صار حجزاً جديداً' },
 ]
@@ -154,7 +154,7 @@ async function tryIt() {
   try {
     store.setStatus(pick.id, 'cancelled')
     await guard.run()
-    toast.success(`أُلغي موعد ${nameOf(pick.customerId)}، وعرضه الحارس على المنتظرين`)
+    toast.success(`أُلغي موعد ${nameOf(pick.customerId)}، وعرضه المساعد على المنتظرين`)
   } finally {
     trying.value = false
   }
@@ -293,7 +293,7 @@ function whatsappFor(e) {
             type="button"
             class="border-border bg-surface text-fg hover:border-fg flex items-center gap-1.5 rounded-[var(--radius-md)] border px-3 py-1.5 text-xs font-semibold"
             :disabled="trying"
-            title="تجريبي: يلغي موعداً قادماً ليعرضه الحارس على المنتظرين"
+            title="تجريبي: يلغي موعداً قادماً ليعرضه المساعد على المنتظرين"
             @click="tryIt"
           >
             <FlaskConical class="h-3.5 w-3.5" aria-hidden="true" /> شاهدها تعمل
@@ -304,7 +304,7 @@ function whatsappFor(e) {
           <EmptyState
             :icon="Repeat"
             title="لا مواعيد متفرّغة الآن"
-            description="عند أي إلغاء يظهر الموعد هنا، ويعرضه الحارس على المنتظرين والعملاء المعتادين خلال دقيقة."
+            description="عند أي إلغاء يظهر الموعد هنا، ويعرضه المساعد على المنتظرين والعملاء المعتادين خلال دقيقة."
           />
         </div>
 

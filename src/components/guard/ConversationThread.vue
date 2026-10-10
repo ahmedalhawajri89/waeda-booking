@@ -72,7 +72,7 @@ async function send(text = draft.value) {
       class="text-fg-muted mb-2 flex items-center gap-1.5 text-[13px] font-semibold"
     >
       <Bot class="text-primary-fg h-4 w-4" aria-hidden="true" />
-      محادثة الحارس
+      محادثة المساعد
     </h3>
 
     <div class="bg-surface-sunken space-y-2 rounded-[var(--radius-md)] p-3">

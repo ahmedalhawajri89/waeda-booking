@@ -50,7 +50,7 @@ const router = useRouter()
 /* ------------------------------------------------------------ the list */
 const FILTERS = [
   { value: 'needs', label: 'تحتاجك' },
-  { value: 'guard', label: 'يتولاها الحارس' },
+  { value: 'guard', label: 'يتولاها المساعد' },
   { value: 'done', label: 'منتهية' },
   { value: 'all', label: 'الكل' },
 ]
@@ -145,7 +145,7 @@ const preview = (r) => {
       ? ''
       : m.template === 'staff'
         ? 'أنت: '
-        : `الحارس · ${TEMPLATE_LABEL[m.template] ?? ''}: `
+        : `المساعد · ${TEMPLATE_LABEL[m.template] ?? ''}: `
   return who + m.body
 }
 const stamp = (at) => (isToday(new Date(at)) ? time(at) : relativeDay(at))
@@ -153,12 +153,12 @@ const stamp = (at) => (isToday(new Date(at)) ? time(at) : relativeDay(at))
 /* ---------------------------------------------------------- the thread */
 const scroller = ref(null)
 const INTENT = {
-  confirm: { label: 'فهمه الحارس: تأكيد', tone: 'text-success-700' },
-  cancel: { label: 'فهمه الحارس: إلغاء', tone: 'text-danger-700' },
-  late: { label: 'فهمه الحارس: سيتأخر', tone: 'text-warning-700' },
-  reschedule: { label: 'فهمه الحارس: يريد موعداً آخر', tone: 'text-fg-muted' },
-  choose: { label: 'فهمه الحارس: اختار وقتاً', tone: 'text-success-700' },
-  unknown: { label: 'لم يفهمه الحارس', tone: 'text-warning-700' },
+  confirm: { label: 'فهمه المساعد: تأكيد', tone: 'text-success-700' },
+  cancel: { label: 'فهمه المساعد: إلغاء', tone: 'text-danger-700' },
+  late: { label: 'فهمه المساعد: سيتأخر', tone: 'text-warning-700' },
+  reschedule: { label: 'فهمه المساعد: يريد موعداً آخر', tone: 'text-fg-muted' },
+  choose: { label: 'فهمه المساعد: اختار وقتاً', tone: 'text-success-700' },
+  unknown: { label: 'لم يفهمه المساعد', tone: 'text-warning-700' },
 }
 
 /** Messages with a day divider wherever the day changes. */
@@ -227,7 +227,7 @@ async function send(text = draft.value) {
       const intent = await guard.reply(selected.value.bookingId, body)
       if (intent === 'confirm') toast.success('أكّد العميل حضوره')
       else if (intent === 'cancel') toast.success('ألغى العميل، والوقت متاح الآن')
-      else if (intent === 'unknown') toast('لم يفهمه الحارس، فأحاله لك')
+      else if (intent === 'unknown') toast('لم يفهمه المساعد، فأحاله لك')
     }
     draft.value = ''
   } catch {
@@ -476,7 +476,7 @@ customers.load()
                 v-if="row.m.needsStaff"
                 class="bg-warning-50 text-warning-700 mt-1.5 flex items-center gap-1.5 rounded-[var(--radius-sm)] px-2.5 py-1 text-xs font-semibold"
               >
-                <TriangleAlert class="h-3.5 w-3.5" aria-hidden="true" /> أحاله الحارس لك
+                <TriangleAlert class="h-3.5 w-3.5" aria-hidden="true" /> أحاله المساعد لك
               </p>
             </div>
 
@@ -502,7 +502,7 @@ customers.load()
               </div>
               <p class="text-fg-faint mt-1 flex items-center gap-1 px-1 text-[11px]">
                 <Bot class="h-3 w-3" aria-hidden="true" />
-                الحارس · {{ TEMPLATE_LABEL[row.m.template] ?? 'رسالة' }} ·
+                المساعد · {{ TEMPLATE_LABEL[row.m.template] ?? 'رسالة' }} ·
                 <span data-numeric>{{ time(row.m.at) }}</span>
               </p>
             </div>
@@ -546,7 +546,7 @@ customers.load()
                 :aria-checked="mode === 'simulate'"
                 class="flex items-center gap-1 rounded-[6px] px-2 py-1"
                 :class="mode === 'simulate' ? 'bg-surface text-fg shadow-sm' : 'text-fg-subtle'"
-                title="جرّب كيف يفهم الحارس ردود العملاء"
+                title="جرّب كيف يفهم المساعد ردود العملاء"
                 @click="mode = 'simulate'"
               >
                 <FlaskConical class="h-3 w-3" aria-hidden="true" /> كأنك العميل
@@ -562,7 +562,7 @@ customers.load()
               :placeholder="
                 mode === 'staff'
                   ? `اكتب ردك إلى ${selected.view?.customer?.name?.split(' ')[0] ?? 'العميل'}…`
-                  : 'اكتب كأنك العميل لترى كيف يفهمه الحارس…'
+                  : 'اكتب كأنك العميل لترى كيف يفهمه المساعد…'
               "
               :aria-label="mode === 'staff' ? 'رد الفريق' : 'رد العميل التجريبي'"
               @keydown="onKey"
@@ -589,7 +589,7 @@ customers.load()
               جديد.</template
             >
             <template v-else
-              >تجريبي: يُعامل النص كرد من العميل، ويتصرف الحارس كما يفعل حقيقةً.</template
+              >تجريبي: يُعامل النص كرد من العميل، ويتصرف المساعد كما يفعل حقيقةً.</template
             >
           </p>
         </footer>

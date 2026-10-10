@@ -78,7 +78,7 @@ const TABS = [
   { value: 'services', label: 'الخدمات', icon: Sparkles, hint: 'ما تقدّمه ومدته وسعره' },
   { value: 'resources', label: 'الفريق', icon: Users, hint: 'من يقدّم الخدمات' },
   { value: 'hours', label: 'ساعات العمل', icon: Clock, hint: 'متى تستقبل الحجوزات' },
-  { value: 'guard', label: 'حارس المواعيد', icon: ShieldCheck, hint: 'التذكير وإعادة الملء' },
+  { value: 'guard', label: 'مساعد الحضور', icon: ShieldCheck, hint: 'التذكير وإعادة الملء' },
   { value: 'plan', label: 'الاشتراك', icon: CreditCard, hint: 'باقتك واستهلاكك' },
   { value: 'account', label: 'الحساب', icon: UserRound, hint: 'بريدك والبيانات' },
 ]

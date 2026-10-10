@@ -317,7 +317,7 @@ export function applyOfferReply({
         createdAt: at,
         updatedAt: at,
         history: [
-          { at, type: 'created', summary: 'حُجز من موعد متفرّغ عبر حارس المواعيد' },
+          { at, type: 'created', summary: 'حُجز من موعد متفرّغ عبر مساعد الحضور' },
           { at, type: 'confirmed', summary: 'تم تأكيد الحجز' },
         ],
       }

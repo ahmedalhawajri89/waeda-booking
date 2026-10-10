@@ -250,7 +250,7 @@ class GuardEngine
                         'payment_status' => 'unpaid',
                         'channel' => 'online',
                     ]);
-                    $this->writer->record($created, 'note_added', 'حُجز من موعد متفرّغ عبر حارس المواعيد');
+                    $this->writer->record($created, 'note_added', 'حُجز من موعد متفرّغ عبر مساعد الحضور');
                     if ($entry = $offer->payload['entryId'] ?? null) {
                         WaitlistEntry::whereKey($entry)->update(['status' => 'booked']);
                     }

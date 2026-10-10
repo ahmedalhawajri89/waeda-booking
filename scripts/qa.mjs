@@ -248,7 +248,7 @@ await go('/app/guard', 'app-guard', 1200)
 console.log(
   (await page.getByText(/يحتاج متابعتك/).count()) > 0 &&
     (await page.getByText(/لماذا يغيب عملاؤك/).count()) > 0 &&
-    (await page.getByRole('heading', { name: /حارس المواعيد/ }).count()) > 0
+    (await page.getByRole('heading', { name: /مساعد الحضور/ }).count()) > 0
     ? '✓ guard scores this week and explains why'
     : '✗ guard screen missing risk badges',
 )

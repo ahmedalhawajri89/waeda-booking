@@ -125,7 +125,7 @@ async function save() {
     </section>
 
     <section class="surface space-y-4 p-4">
-      <h2 class="text-fg text-sm font-bold">ماذا يفعل الحارس؟</h2>
+      <h2 class="text-fg text-sm font-bold">ماذا يفعل المساعد؟</h2>
 
       <div class="grid gap-4 sm:grid-cols-2">
         <BaseSelect

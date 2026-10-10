@@ -44,7 +44,7 @@ export const useSubscriptionStore = defineStore('subscription', () => {
     if (messagesLeft.value === 0)
       return {
         tone: 'danger',
-        text: 'انتهت رسائل واتساب لهذا الشهر: الحارس متوقف عن التذكير، والحجز مستمر.',
+        text: 'انتهت رسائل واتساب لهذا الشهر: المساعد متوقف عن التذكير، والحجز مستمر.',
         action: 'أضف رسائل',
       }
     if (inTrial.value && daysLeft.value <= 3)

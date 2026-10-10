@@ -89,7 +89,7 @@ const router = createRouter({
           path: 'guard',
           name: 'guard',
           component: () => import('@/views/app/GuardView.vue'),
-          meta: { title: 'حارس المواعيد' },
+          meta: { title: 'مساعد الحضور' },
         },
         {
           path: 'analytics',

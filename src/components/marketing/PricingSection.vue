@@ -35,7 +35,7 @@ const FEATURES = [
   { label: 'حجوزات بلا حد، وصفحة حجز بلا حساب للعميل', included: [true, true, true] },
   { label: 'من الفريق', included: PLAN_DATA.map((p) => `${p.staff}`) },
   { label: 'رسائل واتساب شهرياً', included: PLAN_DATA.map((p) => p.messages.toLocaleString('en')) },
-  { label: 'حارس المواعيد: تذكير وتأكيد', included: [true, true, true] },
+  { label: 'مساعد الحضور: تذكير وتأكيد', included: [true, true, true] },
   { label: 'صندوق محادثات العملاء', included: [true, true, true] },
   { label: 'إعادة ملء المواعيد الملغاة', included: PLAN_DATA.map((p) => p.features.refill) },
   { label: 'طلب عربون من المعرّضين للغياب', included: PLAN_DATA.map((p) => p.features.deposits) },
