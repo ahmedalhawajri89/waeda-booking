@@ -103,6 +103,7 @@ class HoursTest extends TestCase
             'startAt' => $start->toIso8601String(),
             'name' => 'سعد',
             'phone' => '0501234567',
+            'verificationToken' => $this->phoneToken('0501234567'),
         ])->assertCreated();
     }
 

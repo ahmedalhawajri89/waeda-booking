@@ -8,6 +8,7 @@ use App\Models\Organization;
 use App\Models\Resource;
 use App\Models\Service;
 use App\Models\User;
+use App\Services\PhoneVerification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -45,13 +46,14 @@ class AuthController extends Controller
         ]);
     }
 
-    public function register(Request $request)
+    public function register(Request $request, PhoneVerification $verification)
     {
         $data = $request->validate([
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:6'],
             'fullName' => ['required', 'string', 'min:2', 'max:255'],
             'phone' => ['nullable', 'string', 'max:64'],
+            'verificationToken' => ['nullable', 'string', 'max:64'],
         ]);
 
         // A new account is a customer. `role` is not in $fillable and is not
@@ -64,10 +66,17 @@ class AuthController extends Controller
             'email' => $data['email'],
             'password' => $data['password'],
         ]);
-        $user->org_id = Organization::query()->value('id');
+        // The business whose page they signed up from, the same one a guest
+        // books with — not whichever row the database happens to return first.
+        $user->org_id = $this->publicOrgId($request);
         $user->save();
 
-        $this->linkCustomer($user, $data['phone'] ?? null);
+        // A customer record holds someone's bookings and contact details, so
+        // an account is linked to one only by a phone proven to be theirs.
+        $phone = $data['phone'] ?? null;
+        if ($phone && $verification->holds($user->org_id, $phone, $data['verificationToken'] ?? null)) {
+            $this->linkCustomer($user, $phone);
+        }
 
         // No token in the response, deliberately: registering creates the
         // account and nothing else, so signing in stays one explicit step.
@@ -248,11 +257,11 @@ class AuthController extends Controller
     private function linkCustomer(User $user, ?string $phone): void
     {
         $digits = Customer::normalisePhone($phone);
-        $record = Customer::where('org_id', $user->org_id)->whereNull('user_id')
-            ->where(fn ($q) => $q
-                ->when(strlen($digits) >= 9, fn ($q) => $q->where('phone_digits', $digits))
-                ->orWhere('email', $user->email))
-            ->first();
+        // By the verified phone only: the account's email was never proven,
+        // so matching on it would hand over whichever record shares it.
+        $record = strlen($digits) >= 9
+            ? Customer::where('org_id', $user->org_id)->whereNull('user_id')->where('phone_digits', $digits)->first()
+            : null;
 
         if ($record) {
             $record->update(['user_id' => $user->id]);

@@ -292,6 +292,7 @@ class BookingApiTest extends TestCase
         $this->postJson('/api/auth/register', [
             'email' => 'reem@example.com', 'password' => 'password',
             'fullName' => 'ريم الدوسري', 'phone' => '050 123 4567',
+            'verificationToken' => $this->phoneToken('0501234567'),
         ])->assertCreated();
 
         $user = User::where('email', 'reem@example.com')->first();

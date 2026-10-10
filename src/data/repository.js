@@ -35,8 +35,9 @@ import { addDays, format } from 'date-fns'
  *   A customer's reply, as the channel would deliver it. The demo's simulator calls this.
  * @property {() => Promise<import('@/lib/waitlist').WaitlistEntry[]>} loadWaitlist
  * @property {(input: { serviceId: string, day: string | null, window: [number, number] | null,
- *   name: string, phone: string }) => Promise<void>} joinWaitlist
- *   Anyone can join — the booking page offers it when a day is full.
+ *   name: string, phone: string, verificationToken?: string }) => Promise<void>} joinWaitlist
+ *   Any guest who has proven their phone can join — the booking page offers it
+ *   when a day is full. The API refuses a phone without its token.
  * @property {(id: string) => Promise<void>} removeFromWaitlist
  * @property {(offerId: string, text: string) => Promise<{ messages: import('@/lib/guardEngine').Message[],
  *   booking: import('@/types').Booking | null, intent: string }>} replyToOffer

@@ -133,6 +133,7 @@ class RegisterBusinessTest extends TestCase
         $reference = $this->withHeader('X-Org', 'lamsa')->postJson('/api/public/bookings', [
             'serviceId' => $service->id, 'resourceId' => $staff->id,
             'startAt' => $start->toIso8601String(), 'name' => 'نوف', 'phone' => '0551234567',
+            'verificationToken' => $this->phoneToken('0551234567', $org->id),
         ])->assertCreated()->json('reference');
 
         $this->assertSame($org->id, Booking::where('reference', $reference)->value('org_id'));

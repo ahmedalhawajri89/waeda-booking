@@ -10,6 +10,7 @@ use App\Models\GuardMessage;
 use App\Models\Service;
 use App\Models\WaitlistEntry;
 use App\Services\Guard\GuardEngine;
+use App\Services\PhoneVerification;
 use Illuminate\Http\Request;
 
 /**
@@ -112,7 +113,7 @@ class GuardController extends Controller
      * is the identity, as everywhere else: an existing customer is matched,
      * a new one created.
      */
-    public function join(Request $request)
+    public function join(Request $request, PhoneVerification $verification)
     {
         $data = $request->validate([
             'serviceId' => ['required', 'string'],
@@ -121,16 +122,29 @@ class GuardController extends Controller
             'window.*' => ['integer', 'between:0,1440'],
             'name' => ['required', 'string', 'min:2', 'max:255'],
             'phone' => ['required', 'string', 'max:64'],
+            'verificationToken' => ['nullable', 'string', 'max:64'],
         ]);
         $org = $this->publicOrgId($request);
         $digits = Customer::normalisePhone($data['phone']);
         if (strlen($digits) < 9) {
             return response()->json(['error' => 'invalid_phone'], 422);
         }
+        // An offer is a message to this phone, so only its holder may ask for one.
+        if (! $verification->holds($org, $data['phone'], $data['verificationToken'] ?? null)) {
+            return response()->json(['error' => 'phone_not_verified'], 422);
+        }
         Service::where('org_id', $org)->where('is_active', true)->findOrFail($data['serviceId']);
 
         $customer = Customer::where('org_id', $org)->where('phone_digits', $digits)->first()
             ?? Customer::create(['org_id' => $org, 'name' => trim($data['name']), 'phone' => trim($data['phone'])]);
+
+        // Asking twice for the same day is one place in the queue, not two.
+        $already = WaitlistEntry::where('org_id', $org)->where('customer_id', $customer->id)
+            ->where('service_id', $data['serviceId'])->where('day', $data['day'] ?? null)
+            ->where('status', 'waiting')->exists();
+        if ($already) {
+            return response()->json(['joined' => true], 200);
+        }
 
         WaitlistEntry::create([
             'org_id' => $org,

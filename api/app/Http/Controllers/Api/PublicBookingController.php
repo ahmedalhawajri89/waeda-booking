@@ -9,6 +9,7 @@ use App\Models\Organization;
 use App\Models\Resource;
 use App\Services\BookingRules;
 use App\Services\BookingWriter;
+use App\Services\PhoneVerification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -39,7 +40,7 @@ class PublicBookingController extends Controller
     {
     }
 
-    public function store(Request $request)
+    public function store(Request $request, PhoneVerification $verification)
     {
         $data = $request->validate([
             'serviceId' => ['required', 'string'],
@@ -51,12 +52,19 @@ class PublicBookingController extends Controller
             'notes' => ['nullable', 'string', 'max:2000'],
             // One of the lengths the service offers (a 90-minute court); none is its default.
             'durationMin' => ['nullable', 'integer', 'between:5,600'],
+            // From POST /public/otp/verify: proof the guest holds this phone.
+            'verificationToken' => ['nullable', 'string', 'max:64'],
         ]);
 
         $org = $this->publicOrgId($request);
 
         if (strlen(Customer::normalisePhone($data['phone'])) < 9) {
             return response()->json(['error' => 'invalid_phone'], 422);
+        }
+        // The phone is the customer's identity: it finds their record and
+        // their history. Booking under it needs proof of holding it.
+        if (! $verification->holds($org, $data['phone'], $data['verificationToken'] ?? null)) {
+            return response()->json(['error' => 'phone_not_verified'], 422);
         }
 
         // Throws InvalidBooking (422 with the same error codes as before).

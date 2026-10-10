@@ -4,8 +4,11 @@ import { format } from 'date-fns'
 import { BellRing, Phone, User } from 'lucide-vue-next'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
-import { repository } from '@/data/repository'
+import CodeInput from '@/components/booking/CodeInput.vue'
+import { isDemoBackend, repository } from '@/data/repository'
+import { usePhoneCode } from '@/composables/usePhoneCode'
 import { dayLabel } from '@/lib/format'
+import { rememberGuest, rememberedGuest, samePhone } from '@/lib/guestIdentity'
 
 /**
  * "Tell me if a time frees up." Offered on the booking page — open when the
@@ -26,8 +29,9 @@ watch(
   },
 )
 
-const name = ref('')
-const phone = ref('')
+const known = rememberedGuest()
+const name = ref(known?.name ?? '')
+const phone = ref(known?.phone ?? '')
 const part = ref('any')
 const done = ref(false)
 const saving = ref(false)
@@ -47,9 +51,27 @@ const phoneError = computed(() =>
   touched.value && !phoneOk.value ? 'رقم الجوال غير مكتمل' : undefined,
 )
 
+/**
+ * An offer goes to this phone as a message, so the phone is proven first —
+ * once per device, as for booking: a device that already did joins directly.
+ */
+const code = usePhoneCode()
+const verifying = ref(false)
+const codeError = ref(false)
+const codeBox = ref(null)
+
+function proof() {
+  const g = rememberedGuest()
+  if (!g || !samePhone(g.phone, phone.value)) return null
+  // The demo checks nothing server-side: a device that verified once is known.
+  return isDemoBackend ? (g.token ?? 'demo') : g.token
+}
+
 async function join() {
   touched.value = true
   if (!name.value.trim() || !phoneOk.value) return
+  const token = proof()
+  if (token === null) return askForCode()
   saving.value = true
   try {
     await repository.joinWaitlist({
@@ -58,11 +80,35 @@ async function join() {
       window: PARTS.find((p) => p.value === part.value).window,
       name: name.value.trim(),
       phone: phone.value.trim(),
+      verificationToken: token,
     })
     done.value = true
+  } catch (e) {
+    if (e?.body?.error === 'phone_not_verified') {
+      rememberGuest(name.value.trim(), phone.value.trim(), null)
+      return askForCode()
+    }
+    throw e
   } finally {
     saving.value = false
   }
+}
+
+async function askForCode() {
+  codeError.value = false
+  verifying.value = await code.send(phone.value.trim())
+}
+
+async function onCode(entered) {
+  const token = await code.verify(phone.value.trim(), entered)
+  if (!token) {
+    codeError.value = true
+    codeBox.value?.clear()
+    return
+  }
+  rememberGuest(name.value.trim(), phone.value.trim(), token)
+  verifying.value = false
+  await join()
 }
 </script>
 
@@ -89,6 +135,24 @@ async function join() {
         <BellRing class="h-4 w-4" aria-hidden="true" />
         سجّلناك. إذا تفرّغ وقت {{ dayLabel(date) }} نرسل لك رسالة، وأول من يرد يأخذه.
       </p>
+
+      <div v-else-if="verifying" class="space-y-3 text-center">
+        <p class="text-fg text-sm font-bold">
+          أدخل الرمز المرسل إلى <span dir="ltr">{{ phone }}</span>
+        </p>
+        <CodeInput ref="codeBox" :invalid="codeError" @complete="onCode" />
+        <p v-if="codeError" class="text-danger-700 text-sm" role="alert">
+          الرمز غير صحيح. حاول مرة أخرى.
+        </p>
+        <div class="text-fg-subtle text-sm">
+          <span v-if="code.resendIn.value > 0" data-numeric>
+            إعادة الإرسال بعد {{ code.resendIn.value }} ثانية
+          </span>
+          <button v-else type="button" class="text-fg font-semibold underline" @click="askForCode">
+            أعد إرسال الرمز
+          </button>
+        </div>
+      </div>
 
       <form v-else class="space-y-3" @submit.prevent="join">
         <p class="text-fg flex items-center gap-2 text-sm font-bold">

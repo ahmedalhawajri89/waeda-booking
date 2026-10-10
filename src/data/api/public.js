@@ -14,8 +14,23 @@ import { request } from './client'
  */
 
 /**
+ * A four-digit code to this phone. `devCode` comes back only while no real
+ * channel is connected, so the page can show it in place of the message.
+ * @returns {Promise<{ sent: true, devCode?: string }>}
+ */
+export function sendPhoneCode(phone) {
+  return request('/public/otp', { method: 'POST', body: { phone }, auth: false })
+}
+
+/** The code typed, for a token that proves the phone (kept on the device). */
+export function verifyPhoneCode(phone, code) {
+  return request('/public/otp/verify', { method: 'POST', body: { phone, code }, auth: false })
+}
+
+/**
  * @param {{ serviceId: string, resourceId: string, startAt: string,
- *           name: string, phone: string, email?: string, notes?: string }} input
+ *           name: string, phone: string, email?: string, notes?: string,
+ *           verificationToken?: string }} input
  * @returns {Promise<{ id: string, reference: string }>}
  */
 export function bookPublic(input) {

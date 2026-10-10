@@ -121,6 +121,7 @@ class SubscriptionTest extends TestCase
             'serviceId' => $this->service->id, 'resourceId' => $this->room->id,
             'startAt' => Carbon::now('Asia/Riyadh')->addDays(2)->setTime(10, 0)->toIso8601String(),
             'name' => 'سعد', 'phone' => '0507654321',
+            'verificationToken' => $this->phoneToken('0507654321'),
         ])->assertCreated();
     }
 

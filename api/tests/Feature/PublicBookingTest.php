@@ -64,13 +64,16 @@ class PublicBookingTest extends TestCase
 
     private function payload(array $overrides = []): array
     {
-        return array_merge([
+        $payload = array_merge([
             'serviceId' => $this->service->id,
             'resourceId' => $this->room->id,
             'startAt' => $this->futureSlot()->toIso8601String(),
             'name' => 'ريم الدوسري',
             'phone' => '050 123 4567',
         ], $overrides);
+        $payload['verificationToken'] ??= $this->phoneToken($payload['phone']);
+
+        return $payload;
     }
 
     public function test_a_guest_can_book_and_gets_a_reference(): void

@@ -14,4 +14,11 @@ return [
     */
     'ai_key' => env('AI_API_KEY'),
     'ai_model' => env('AI_MODEL'),
+
+    /*
+    | Whether the phone-verification code is also returned to the page. On by
+    | default only with the "log" channel, where no customer can receive it;
+    | with a real channel connected the code reaches the phone and nothing else.
+    */
+    'otp_echo' => (bool) env('OTP_ECHO', env('GUARD_CHANNEL', 'log') === 'log'),
 ];

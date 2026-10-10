@@ -7,27 +7,36 @@
  * matters (it is where the reminder goes), and after that this device simply
  * remembers them so the next booking is two taps.
  *
- * This is a convenience, not a credential: anything here can be edited in the
- * browser. The server-side check arrives with the WhatsApp channel, which is
- * what actually sends the code.
+ * The proof is the token the server gave for the code, kept here with the
+ * phone. The name and phone are a convenience anyone can edit; the token is
+ * what the server checks, and it is good only for the phone it was issued for.
  */
 const KEY = 'bookingpro:guest:v1'
 
-/** @returns {{ name: string, phone: string } | null} */
+/** @returns {{ name: string, phone: string, token: string | null } | null} */
 export function rememberedGuest() {
   try {
     const raw = localStorage.getItem(KEY)
     if (!raw) return null
     const g = JSON.parse(raw)
-    return g?.phone ? { name: g.name ?? '', phone: g.phone } : null
+    return g?.phone ? { name: g.name ?? '', phone: g.phone, token: g.token ?? null } : null
   } catch {
     return null
   }
 }
 
-export function rememberGuest(name, phone) {
+/**
+ * @param {string} name
+ * @param {string} phone
+ * @param {string | null} [token] Left out, the token already kept for this phone
+ *   stays; null forgets it (the server no longer accepts it).
+ */
+export function rememberGuest(name, phone, token) {
+  const kept = rememberedGuest()
+  const proof =
+    token !== undefined ? token : kept && samePhone(kept.phone, phone) ? kept.token : null
   try {
-    localStorage.setItem(KEY, JSON.stringify({ name, phone, at: Date.now() }))
+    localStorage.setItem(KEY, JSON.stringify({ name, phone, token: proof, at: Date.now() }))
   } catch {
     /* storage blocked: they verify again next time */
   }

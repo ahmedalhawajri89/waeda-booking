@@ -64,7 +64,7 @@ class VenueBookingTest extends TestCase
         return $this->postJson('/api/public/bookings', array_filter([
             'serviceId' => $this->padel->id, 'resourceId' => $this->court->id,
             'startAt' => $start->toIso8601String(), 'name' => 'سعد', 'phone' => '0501234567',
-            'durationMin' => $duration,
+            'durationMin' => $duration, 'verificationToken' => $this->phoneToken('0501234567'),
         ] + $extra, fn ($v) => $v !== null));
     }
 

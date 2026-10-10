@@ -31,6 +31,7 @@ import { business, initialOf } from '@/data/business'
 import { isConflict } from '@/data/errors'
 import { isDemoBackend } from '@/data/repository'
 import { useGuestBusiness } from '@/composables/useGuestBusiness'
+import { usePhoneCode } from '@/composables/usePhoneCode'
 import { groupByPeriod, useGuestAvailability } from '@/composables/useGuestAvailability'
 import { duration, fullDate, money, time } from '@/lib/format'
 import { buildIcs, downloadIcs } from '@/lib/ics'
@@ -340,29 +341,17 @@ onMounted(async () => {
 
 /* ------------------------------------------------------- verify + book */
 /**
- * The code that would be sent on WhatsApp. Until the channel is connected
- * there is nothing to send it with, so the demo shows it on screen instead
- * and says so — the flow the customer goes through is the real one.
+ * The code to the phone, then a token for it that this device keeps — the
+ * server will not book under a phone without one. See usePhoneCode.
  */
-const sentCode = ref('')
+const code = usePhoneCode()
+const resendIn = code.resendIn
 const codeError = ref(false)
 const codeBox = ref(null)
-const resendIn = ref(0)
-let resendTimer
 
 function sendCode() {
-  sentCode.value = String(Math.floor(1000 + Math.random() * 9000))
   codeError.value = false
-  resendIn.value = 30
-  clearInterval(resendTimer)
-  resendTimer = setInterval(() => {
-    resendIn.value -= 1
-    if (resendIn.value <= 0) clearInterval(resendTimer)
-  }, 1000)
-  toast(`واتساب · ${business.name}`, {
-    description: `رمز التحقق: ${sentCode.value}`,
-    duration: 8000,
-  })
+  return code.send(phone.value.trim())
 }
 
 async function confirm() {
@@ -371,20 +360,36 @@ async function confirm() {
     if (nextAction.value.target) scrollTo(nextAction.value.target)
     return
   }
-  const known = returning.value && samePhone(returning.value.phone, phone.value)
+  // A device that proved this phone before books straight away.
+  const known =
+    returning.value &&
+    samePhone(returning.value.phone, phone.value) &&
+    (isDemoBackend || returning.value.token)
   if (known) return book()
+  askForCode()
+}
+
+function askForCode() {
   stage.value = 'verify'
   sendCode()
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-function onCode(code) {
-  if (code !== sentCode.value) {
+async function onCode(entered) {
+  let token
+  try {
+    token = await code.verify(phone.value.trim(), entered)
+  } catch {
+    toast.error('تعذّر التحقق من الرمز. حاول مرة أخرى.')
+    codeBox.value?.clear()
+    return
+  }
+  if (!token) {
     codeError.value = true
     codeBox.value?.clear()
     return
   }
-  rememberGuest(name.value.trim(), phone.value.trim())
+  rememberGuest(name.value.trim(), phone.value.trim(), token)
   returning.value = rememberedGuest()
   book()
 }
@@ -425,6 +430,7 @@ async function book() {
         phone: phone.value.trim(),
         notes: notes.value.trim() || undefined,
         durationMin: durationMin.value,
+        verificationToken: returning.value?.token ?? undefined,
       })
       reference.value = created.reference
       // The server's price, not this page's estimate.
@@ -439,6 +445,13 @@ async function book() {
     stage.value = 'done'
     window.scrollTo({ top: 0 })
   } catch (e) {
+    // The kept proof expired or was for another number: prove it again.
+    if (e?.body?.error === 'phone_not_verified') {
+      rememberGuest(name.value.trim(), phone.value.trim(), null)
+      returning.value = rememberedGuest()
+      askForCode()
+      return
+    }
     stage.value = 'form'
     toast.error(
       e?.status === 409 || isConflict(e)
@@ -584,6 +597,7 @@ const dayTitle = computed(() =>
           </button>
         </div>
         <p
+          v-if="code.echoed.value"
           class="bg-surface-sunken text-fg-subtle mt-6 rounded-[var(--radius-md)] px-3 py-2 text-xs"
         >
           نسخة تجريبية: يظهر الرمز في إشعار أعلى الشاشة بدل الواتساب.

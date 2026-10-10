@@ -173,6 +173,7 @@ class GuardBackfillTest extends TestCase
         $this->postJson('/api/public/waitlist', [
             'serviceId' => $this->service->id, 'day' => '2030-03-06', 'window' => [900, 1080],
             'name' => 'جود', 'phone' => '050 222 2222',
+            'verificationToken' => $this->phoneToken('0502222222'),
         ])->assertCreated();
 
         $entry = WaitlistEntry::first();

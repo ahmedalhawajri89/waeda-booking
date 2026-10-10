@@ -67,6 +67,7 @@ class BookingAcknowledgeTest extends TestCase
             'startAt' => $this->slot()->toIso8601String(),
             'name' => 'ريم الدوسري',
             'phone' => '0501234567',
+            'verificationToken' => $this->phoneToken('0501234567'),
         ])->assertCreated()->json('id');
 
         return Booking::findOrFail($id);

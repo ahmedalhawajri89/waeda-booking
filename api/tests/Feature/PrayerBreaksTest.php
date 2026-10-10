@@ -110,6 +110,7 @@ class PrayerBreaksTest extends TestCase
             'startAt' => $start->toIso8601String(),
             'name' => 'نورة',
             'phone' => '0501234567',
+            'verificationToken' => $this->phoneToken('0501234567'),
         ]);
     }
 

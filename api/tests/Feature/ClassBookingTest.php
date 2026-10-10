@@ -71,10 +71,12 @@ class ClassBookingTest extends TestCase
 
     private function seat(int $n, ?Service $service = null, ?Carbon $at = null)
     {
+        $phone = '05000000'.str_pad((string) $n, 2, '0', STR_PAD_LEFT);
+
         return $this->postJson('/api/public/bookings', [
             'serviceId' => ($service ?? $this->yoga)->id, 'resourceId' => $this->trainer->id,
             'startAt' => ($at ?? $this->sunday())->toIso8601String(),
-            'name' => "عميلة $n", 'phone' => '05000000'.str_pad((string) $n, 2, '0', STR_PAD_LEFT),
+            'name' => "عميلة $n", 'phone' => $phone, 'verificationToken' => $this->phoneToken($phone),
         ]);
     }
 

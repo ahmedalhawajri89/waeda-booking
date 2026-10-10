@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\CatalogController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\GuardController;
 use App\Http\Controllers\Api\GuardPolicyController;
+use App\Http\Controllers\Api\PhoneVerificationController;
 use App\Http\Controllers\Api\PublicBookingController;
 use App\Http\Controllers\Api\SubscriptionController;
 use App\Http\Middleware\EnsureOperator;
@@ -44,6 +45,10 @@ Route::prefix('public')->middleware('throttle:20,1')->group(function () {
     // of the read above.
     Route::get('availability', [PublicBookingController::class, 'availability'])
         ->withoutMiddleware('throttle:20,1')->middleware('throttle:60,1');
+    // Proving the phone before it is used as an identity: a code, then a
+    // token the device keeps. Booking and joining the waitlist require it.
+    Route::post('otp', [PhoneVerificationController::class, 'send']);
+    Route::post('otp/verify', [PhoneVerificationController::class, 'verify']);
     Route::post('bookings', [PublicBookingController::class, 'store']);
     // A class's seats taken, by session — counts only.
     Route::get('classes/{serviceId}/seats', [PublicBookingController::class, 'seats']);
