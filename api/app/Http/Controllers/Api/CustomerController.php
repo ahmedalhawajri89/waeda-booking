@@ -42,7 +42,13 @@ class CustomerController extends Controller
             return response()->json([]);
         }
 
-        return response()->json($rows->map(fn (Customer $c) => self::toDomain($c))->all());
+        // `notes` is what the business writes about a customer ("needs a
+        // deposit"); the customer reading their own record does not see it.
+        return response()->json($rows->map(function (Customer $c) use ($user) {
+            $row = self::toDomain($c);
+
+            return $user->isOperator() ? $row : array_diff_key($row, ['notes' => true]);
+        })->all());
     }
 
     public function bulkUpdate(Request $request)

@@ -292,6 +292,10 @@ class PublicBookingController extends Controller
         if ($start->lessThanOrEqualTo(now()->addMinutes(self::CHANGE_CUTOFF_MIN))) {
             return response()->json(['error' => 'start_too_soon'], 422);
         }
+        // The same checks as booking it: a class seat moves only to another
+        // session, and only with someone who still takes bookings.
+        $this->rules->resourceIsActive($booking->org_id, $booking->resource_id);
+        $this->rules->isSession($booking->org_id, $booking->service, $booking->resource_id, $start);
         $this->rules->withinHours(
             $booking->org_id,
             $start,
