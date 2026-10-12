@@ -1,10 +1,12 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   Briefcase,
   CalendarDays,
   Check,
   GraduationCap,
+  Pause,
+  Play,
   Scissors,
   Stethoscope,
   Trophy,
@@ -154,6 +156,108 @@ const SECTORS = [
 const active = ref(SECTORS[0].key)
 const sector = computed(() => SECTORS.find((s) => s.key === active.value))
 const TIMES = ['9:30 ص', '10:00 ص', '11:30 ص', '1:00 م', '4:30 م', '6:00 م']
+/** 11:30 is taken on every page: a full day is part of the picture. */
+const TAKEN = 2
+
+/* ---------------------------------------------------------------- tour
+ * Most visitors never click a tab, so the section shows them round itself:
+ * each sector for a few seconds, a bar under its tab filling as it goes. It
+ * runs while the section is on screen, holds while pointed at or focused,
+ * stops for good on a click or after one full round, and has its own pause
+ * button (moving content must be stoppable). Never with reduced motion.
+ */
+const DWELL_MS = 6500
+const reduced =
+  typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+const touring = ref(!reduced)
+const userPaused = ref(false)
+const hovering = ref(false)
+const inView = ref(false)
+const playing = computed(
+  () => touring.value && !userPaused.value && !hovering.value && inView.value,
+)
+let visited = 1
+
+function advance() {
+  if (visited >= SECTORS.length) {
+    // One full round, then back to the first page and quiet.
+    touring.value = false
+    show(SECTORS[0].key)
+    return
+  }
+  visited += 1
+  const i = SECTORS.findIndex((s) => s.key === active.value)
+  show(SECTORS[(i + 1) % SECTORS.length].key)
+}
+
+function pick(key) {
+  touring.value = false
+  show(key)
+}
+
+const tablist = ref(null)
+function show(key) {
+  active.value = key
+  book()
+  // On a phone the tabs scroll sideways: bring this one into the strip
+  // without moving the page itself.
+  const list = tablist.value
+  const tab = document.getElementById(`sector-tab-${key}`)
+  if (list && tab && list.scrollWidth > list.clientWidth) {
+    list.scrollTo({
+      left: tab.offsetLeft - (list.clientWidth - tab.offsetWidth) / 2,
+      behavior: 'smooth',
+    })
+  }
+}
+
+/* --------------------------------------------------- a booking, made live
+ * On each page a customer books: a service, a person, a time, then the
+ * confirmation slides in. The same scene plays for a sector picked by hand.
+ */
+const sel = ref(0)
+const who = ref(0)
+const time = ref(null)
+const booked = ref(false)
+const tap = ref(0)
+const scene = []
+function book() {
+  scene.forEach(clearTimeout)
+  scene.length = 0
+  sel.value = 0
+  who.value = 0
+  time.value = null
+  booked.value = false
+  if (reduced) return
+  const at = (ms, fn) => scene.push(setTimeout(fn, ms))
+  at(1000, () => {
+    sel.value = 1
+    tap.value += 1
+  })
+  at(2000, () => (who.value = 1))
+  at(3000, () => (time.value = 3))
+  at(3900, () => (booked.value = true))
+}
+
+const root = ref(null)
+let io
+onMounted(() => {
+  if (reduced) return
+  io = new IntersectionObserver(
+    ([e]) => {
+      const was = inView.value
+      inView.value = e.isIntersecting
+      // The first page's booking plays when the section is first seen.
+      if (e.isIntersecting && !was && !booked.value && !scene.length) book()
+    },
+    { threshold: 0.35 },
+  )
+  io.observe(root.value)
+})
+onBeforeUnmount(() => {
+  io?.disconnect()
+  scene.forEach(clearTimeout)
+})
 
 function onKey(e, i) {
   const d =
@@ -165,13 +269,13 @@ function onKey(e, i) {
   if (!d) return
   e.preventDefault()
   const next = SECTORS[(i + d + SECTORS.length) % SECTORS.length]
-  active.value = next.key
+  pick(next.key)
   document.getElementById(`sector-tab-${next.key}`)?.focus()
 }
 </script>
 
 <template>
-  <section id="sectors" class="section bg-surface">
+  <section id="sectors" ref="root" class="section bg-surface">
     <div class="section-inner">
       <header class="mb-12 max-w-2xl md:mb-16">
         <h2 v-reveal class="type-h1 text-fg mb-4">لمن تناسب وعدة؟</h2>
@@ -180,47 +284,80 @@ function onKey(e, i) {
         </p>
       </header>
 
-      <div class="grid gap-8 lg:grid-cols-[20rem_1fr] lg:gap-12">
-        <!-- tabs -->
-        <div
-          role="tablist"
-          aria-label="القطاعات"
-          aria-orientation="vertical"
-          class="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:mx-0 lg:flex-col lg:overflow-visible lg:px-0"
-        >
-          <button
-            v-for="(s, i) in SECTORS"
-            :id="`sector-tab-${s.key}`"
-            :key="s.key"
-            type="button"
-            role="tab"
-            :aria-selected="active === s.key"
-            aria-controls="sector-panel"
-            :tabindex="active === s.key ? 0 : -1"
-            class="group flex shrink-0 items-start gap-3 rounded-[var(--radius-lg)] border px-4 py-3 text-start transition-colors lg:py-4"
-            :class="
-              active === s.key
-                ? 'border-fg bg-surface'
-                : 'border-border hover:bg-surface-hover lg:border-transparent'
-            "
-            @click="active = s.key"
-            @keydown="onKey($event, i)"
+      <div
+        class="grid gap-8 lg:grid-cols-[20rem_1fr] lg:gap-12"
+        @pointerenter="hovering = true"
+        @pointerleave="hovering = false"
+        @focusin="hovering = true"
+        @focusout="hovering = false"
+      >
+        <!-- min-w-0: the tab strip scrolls sideways on a phone; without it this
+             grid cell took the whole strip's width and pushed the page wide. -->
+        <div class="min-w-0">
+          <!-- tabs -->
+          <div
+            ref="tablist"
+            role="tablist"
+            aria-label="القطاعات"
+            aria-orientation="vertical"
+            class="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:mx-0 lg:flex-col lg:overflow-visible lg:px-0"
           >
-            <component
-              :is="s.icon"
-              class="mt-0.5 h-5 w-5 shrink-0"
-              :class="active === s.key ? 'text-primary-fg' : 'text-fg-subtle'"
-              aria-hidden="true"
-            />
-            <span>
-              <span
-                class="text-fg block text-[15px] font-bold whitespace-nowrap lg:whitespace-normal"
-              >
-                <span class="lg:hidden">{{ s.short }}</span>
-                <span class="hidden lg:inline">{{ s.label }}</span>
+            <button
+              v-for="(s, i) in SECTORS"
+              :id="`sector-tab-${s.key}`"
+              :key="s.key"
+              type="button"
+              role="tab"
+              :aria-selected="active === s.key"
+              aria-controls="sector-panel"
+              :tabindex="active === s.key ? 0 : -1"
+              class="group relative flex shrink-0 items-start gap-3 overflow-hidden rounded-[var(--radius-lg)] border px-4 py-3 text-start transition-colors lg:py-4"
+              :class="
+                active === s.key
+                  ? 'border-fg bg-surface'
+                  : 'border-border hover:bg-surface-hover lg:border-transparent'
+              "
+              @click="pick(s.key)"
+              @keydown="onKey($event, i)"
+            >
+              <component
+                :is="s.icon"
+                class="mt-0.5 h-5 w-5 shrink-0 transition-transform duration-300"
+                :class="active === s.key ? 'text-primary-fg scale-110' : 'text-fg-subtle'"
+                aria-hidden="true"
+              />
+              <span>
+                <span
+                  class="text-fg block text-[15px] font-bold whitespace-nowrap lg:whitespace-normal"
+                >
+                  <span class="lg:hidden">{{ s.short }}</span>
+                  <span class="hidden lg:inline">{{ s.label }}</span>
+                </span>
+                <span class="text-fg-subtle mt-0.5 hidden text-[13px] lg:block">{{ s.line }}</span>
               </span>
-              <span class="text-fg-subtle mt-0.5 hidden text-[13px] lg:block">{{ s.line }}</span>
-            </span>
+              <!-- how long until the tour moves on -->
+              <span
+                v-if="touring && active === s.key"
+                :key="`bar-${s.key}`"
+                class="tour-bar bg-primary absolute bottom-0 h-0.5"
+                :style="{
+                  animationDuration: `${DWELL_MS}ms`,
+                  animationPlayState: playing ? 'running' : 'paused',
+                }"
+                aria-hidden="true"
+                @animationend="advance"
+              />
+            </button>
+          </div>
+
+          <button
+            v-if="touring"
+            type="button"
+            class="text-fg-subtle hover:text-fg mt-3 hidden items-center gap-1.5 px-1 py-1 text-xs font-semibold lg:inline-flex"
+            @click="userPaused = !userPaused"
+          >
+            <component :is="userPaused ? Play : Pause" class="h-3.5 w-3.5" aria-hidden="true" />
+            {{ userPaused ? 'تشغيل الجولة' : 'إيقاف الجولة' }}
           </button>
         </div>
 
@@ -236,9 +373,9 @@ function onKey(e, i) {
               :key="sector.key"
               class="border-border bg-surface rounded-[var(--radius-lg)] border p-5"
             >
-              <div class="border-border mb-4 flex items-center gap-3 border-b pb-4">
+              <div class="rise border-border mb-4 flex items-center gap-3 border-b pb-4">
                 <span
-                  class="bg-ink grid h-10 w-10 place-items-center rounded-[var(--radius-md)] text-white"
+                  class="pop bg-ink grid h-10 w-10 place-items-center rounded-[var(--radius-md)] text-white"
                   aria-hidden="true"
                 >
                   <component :is="sector.icon" class="h-5 w-5" />
@@ -249,63 +386,93 @@ function onKey(e, i) {
                 </div>
               </div>
 
-              <p class="text-fg-subtle mb-2 text-xs font-semibold">الخدمة</p>
+              <p class="rise text-fg-subtle mb-2 text-xs font-semibold" style="--d: 60ms">الخدمة</p>
               <ul class="mb-5 space-y-2">
                 <li
                   v-for="(svc, i) in sector.services"
                   :key="svc.name"
-                  class="flex items-center justify-between rounded-[var(--radius-md)] border px-3.5 py-2.5"
-                  :class="i === 0 ? 'border-primary bg-primary-soft' : 'border-border'"
+                  class="rise relative flex items-center justify-between overflow-hidden rounded-[var(--radius-md)] border px-3.5 py-2.5 transition-colors duration-300"
+                  :class="i === sel ? 'border-primary bg-primary-soft' : 'border-border'"
+                  :style="{ '--d': `${100 + i * 60}ms` }"
                 >
                   <span>
                     <span class="text-fg block text-sm font-semibold">{{ svc.name }}</span>
                     <span class="text-fg-subtle text-xs">{{ svc.meta }}</span>
                   </span>
                   <span class="text-fg text-sm font-semibold" data-numeric>{{ svc.price }}</span>
+                  <span v-if="i === sel && tap" :key="tap" class="ripple" aria-hidden="true" />
                 </li>
               </ul>
 
-              <p class="text-fg-subtle mb-2 text-xs font-semibold">{{ sector.who }}</p>
-              <div class="mb-5 flex flex-wrap gap-2">
+              <p class="rise text-fg-subtle mb-2 text-xs font-semibold" style="--d: 300ms">
+                {{ sector.who }}
+              </p>
+              <div class="rise mb-5 flex flex-wrap gap-2" style="--d: 340ms">
                 <span
                   v-for="(p, i) in sector.staff"
                   :key="p"
-                  class="rounded-full border px-3 py-1 text-xs font-medium"
-                  :class="i === 0 ? 'border-fg text-fg' : 'border-border text-fg-muted'"
+                  class="rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-300"
+                  :class="
+                    i === who ? 'border-fg bg-fg text-fg-inverse' : 'border-border text-fg-muted'
+                  "
                   >{{ p }}</span
                 >
               </div>
 
-              <p class="text-fg-subtle mb-2 text-xs font-semibold">أقرب الأوقات، غداً</p>
-              <div class="grid grid-cols-3 gap-2">
+              <p class="rise text-fg-subtle mb-2 text-xs font-semibold" style="--d: 380ms">
+                أقرب الأوقات، غداً
+              </p>
+              <div class="rise grid grid-cols-3 gap-2" style="--d: 420ms">
                 <span
                   v-for="(t, i) in TIMES"
                   :key="t"
-                  class="rounded-[var(--radius-sm)] border py-2 text-center text-xs font-semibold"
+                  class="rounded-[var(--radius-sm)] border py-2 text-center text-xs font-semibold transition-colors duration-300"
                   :class="
-                    i === 2
+                    i === TAKEN
                       ? 'border-border bg-surface-sunken text-fg-faint line-through'
-                      : 'border-border text-fg'
+                      : i === time
+                        ? 'border-primary bg-primary text-fg-on-primary'
+                        : 'border-border text-fg'
                   "
                   data-numeric
                   >{{ t }}</span
                 >
+              </div>
+
+              <!-- the page's answer; its room is kept so nothing jumps -->
+              <div class="mt-4 h-10">
+                <Transition name="booked">
+                  <p
+                    v-if="booked"
+                    class="bg-success-50 text-success-700 flex h-10 items-center gap-2 rounded-[var(--radius-md)] px-3 text-sm font-semibold"
+                  >
+                    <Check class="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span class="truncate">
+                      تم الحجز · {{ sector.services[sel]?.name }} · {{ TIMES[time] }}
+                    </span>
+                  </p>
+                </Transition>
               </div>
             </div>
           </Transition>
 
           <Transition name="swap" mode="out-in">
             <div :key="sector.key" class="self-center">
-              <p class="text-fg mb-4 font-bold">
+              <p class="rise text-fg mb-4 font-bold" style="--d: 120ms">
                 ما يهمّ {{ sector.short === 'أي نشاط' ? 'نشاطك' : sector.short }}
               </p>
               <ul class="space-y-3">
                 <li
-                  v-for="p in sector.points"
+                  v-for="(p, i) in sector.points"
                   :key="p"
-                  class="text-fg-muted flex gap-2.5 text-[15px]"
+                  class="rise text-fg-muted flex gap-2.5 text-[15px]"
+                  :style="{ '--d': `${200 + i * 90}ms` }"
                 >
-                  <Check class="text-primary-fg mt-1 h-4 w-4 shrink-0" aria-hidden="true" />
+                  <Check
+                    class="draw text-primary-fg mt-1 h-4 w-4 shrink-0"
+                    :style="{ '--d': `${320 + i * 90}ms` }"
+                    aria-hidden="true"
+                  />
                   {{ p }}
                 </li>
               </ul>
@@ -326,15 +493,101 @@ function onKey(e, i) {
 <style scoped>
 .swap-enter-active,
 .swap-leave-active {
-  transition:
-    opacity 0.2s ease,
-    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity 0.2s ease;
 }
-.swap-enter-from {
-  opacity: 0;
-  transform: translateY(6px);
-}
+.swap-enter-from,
 .swap-leave-to {
   opacity: 0;
+}
+
+/* Each page comes in piece by piece, top to bottom. */
+.rise {
+  animation: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+.pop {
+  animation: pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes pop {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+}
+/* The tick of each point is drawn rather than shown. */
+.draw :deep(path) {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  animation: draw 0.45s ease-out forwards;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* The customer's tap on a service. */
+.ripple {
+  position: absolute;
+  inset-inline-start: 50%;
+  top: 50%;
+  width: 24px;
+  height: 24px;
+  margin: -12px;
+  border-radius: 999px;
+  background: var(--color-primary);
+  opacity: 0.25;
+  animation: ripple 0.6s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes ripple {
+  to {
+    transform: scale(9);
+    opacity: 0;
+  }
+}
+
+/* Fills from the start edge: the right in Arabic. */
+.tour-bar {
+  inset-inline-start: 0;
+  width: 100%;
+  transform-origin: right;
+  animation-name: fill;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+@keyframes fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.booked-enter-active {
+  transition:
+    opacity 0.35s ease,
+    transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.booked-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .pop,
+  .draw :deep(path) {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
 }
 </style>
