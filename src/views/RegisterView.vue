@@ -26,10 +26,9 @@ import {
 import { toast } from 'vue-sonner'
 import AppLogo from '@/components/ui/AppLogo.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
-import PhoneFrame from '@/components/marketing/hero/PhoneFrame.vue'
+import PagePreview from '@/components/auth/PagePreview.vue'
 import { useAuthStore } from '@/stores/auth'
 import { DURATIONS, HOURS_PRESETS, SECTORS, sectorByKey } from '@/data/businessTemplates'
-import { iconFor } from '@/lib/icons'
 import { initialOf } from '@/data/business'
 import { SLUG_PATTERN, slugify } from '@/lib/slug'
 import { duration } from '@/lib/format'
@@ -749,78 +748,7 @@ const price = (p) => (Number(p) > 0 ? `${Number(p)} ر.س` : 'مجاناً')
       <!-- the page, building itself -->
       <aside class="hidden lg:block" aria-label="معاينة صفحة الحجز">
         <div class="sticky top-8">
-          <p class="text-fg-subtle mb-3 text-center text-xs font-semibold">هكذا يرى عملاؤك صفحتك</p>
-          <PhoneFrame class="mx-auto h-[34rem] w-[17rem]" time="9:41">
-            <div class="flex h-full flex-col overflow-hidden">
-              <div class="border-border border-b px-4 pt-2 pb-3">
-                <div class="flex items-center gap-2.5">
-                  <span
-                    class="bg-ink font-display grid h-9 w-9 shrink-0 place-items-center rounded-md text-sm font-bold text-white"
-                    >{{ preview.initial }}</span
-                  >
-                  <div class="min-w-0">
-                    <p class="text-fg truncate text-[13px] font-bold">{{ preview.name }}</p>
-                    <p class="text-fg-subtle truncate text-[10px]">{{ preview.category }}</p>
-                  </div>
-                </div>
-                <p
-                  v-if="preview.address"
-                  class="text-fg-subtle mt-1.5 flex items-center gap-1 truncate text-[10px]"
-                >
-                  <MapPin class="h-3 w-3 shrink-0" aria-hidden="true" />{{ preview.address }}
-                </p>
-              </div>
-              <div class="flex-1 space-y-3 overflow-hidden px-4 py-3">
-                <p class="text-fg text-[11px] font-bold">الخدمة</p>
-                <TransitionGroup tag="ul" name="row" class="space-y-1.5">
-                  <li
-                    v-for="(s, i) in preview.services.slice(0, 4)"
-                    :key="s.name + i"
-                    class="border-border flex items-center gap-2 rounded-md border px-2.5 py-2"
-                    :class="i === 0 && 'border-fg'"
-                  >
-                    <component
-                      :is="iconFor(s.iconKey)"
-                      class="text-fg-subtle h-3.5 w-3.5 shrink-0"
-                    />
-                    <span class="min-w-0 flex-1">
-                      <span class="text-fg block truncate text-[11px] font-semibold">{{
-                        s.name || 'خدمة جديدة'
-                      }}</span>
-                      <span class="text-fg-subtle text-[9px]">{{ duration(s.durationMin) }}</span>
-                    </span>
-                    <span class="text-fg shrink-0 text-[10px] font-bold" data-numeric>{{
-                      price(s.price)
-                    }}</span>
-                  </li>
-                </TransitionGroup>
-                <p class="text-fg pt-1 text-[11px] font-bold">
-                  {{ isPlaces ? 'أي ملعب؟' : 'مع من؟' }}
-                </p>
-                <div class="flex flex-wrap gap-1">
-                  <span
-                    class="bg-fg text-fg-inverse rounded-full px-2 py-0.5 text-[9px] font-semibold"
-                    >{{ isPlaces ? 'أول ملعب متاح' : 'أي متاح' }}</span
-                  >
-                  <span
-                    v-for="(m, i) in preview.staff.slice(0, 3)"
-                    :key="m.name + i"
-                    class="border-border text-fg rounded-full border px-2 py-0.5 text-[9px]"
-                    >{{ m.name }}</span
-                  >
-                </div>
-              </div>
-              <div class="border-border border-t p-3">
-                <span
-                  class="bg-primary text-fg-on-primary block rounded-md py-2 text-center text-[11px] font-bold"
-                  >احجز موعدك</span
-                >
-              </div>
-            </div>
-          </PhoneFrame>
-          <p class="text-fg-faint mt-3 text-center text-[11px]" dir="ltr">
-            waeda.app/b/{{ biz.slug || '…' }}
-          </p>
+          <PagePreview :preview="preview" :is-places="isPlaces" :slug="biz.slug" />
         </div>
       </aside>
     </main>
