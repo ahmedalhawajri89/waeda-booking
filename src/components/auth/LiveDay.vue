@@ -1,7 +1,8 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Check, Clock, RefreshCw, Send, X } from 'lucide-vue-next'
 import { NUMBER_LOCALE } from '@/lib/format'
+import { useTween } from '@/composables/useTween'
 
 /**
  * The owner's morning, told by the product itself — beside the sign-in form,
@@ -51,19 +52,7 @@ const protectedSar = computed(() =>
 )
 
 // The figure climbs to each new total instead of jumping to it.
-const shown = ref(0)
-let raf = 0
-watch(protectedSar, (to) => {
-  cancelAnimationFrame(raf)
-  const from = shown.value
-  const start = performance.now()
-  const tick = (now) => {
-    const t = Math.min(1, (now - start) / 700)
-    shown.value = Math.round(from + (to - from) * (1 - Math.pow(1 - t, 3)))
-    if (t < 1) raf = requestAnimationFrame(tick)
-  }
-  raf = requestAnimationFrame(tick)
-})
+const { value: shown } = useTween(() => protectedSar.value, { from: 0 })
 const sar = new Intl.NumberFormat(NUMBER_LOCALE)
 
 // The ring: how much of the day is settled.
@@ -109,7 +98,6 @@ function onVisibility() {
 onMounted(() => {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     states.value = [...FINAL]
-    shown.value = protectedSar.value
     return
   }
   timers.push(setTimeout(play, 400))
@@ -117,7 +105,6 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   clear()
-  cancelAnimationFrame(raf)
   document.removeEventListener('visibilitychange', onVisibility)
 })
 
