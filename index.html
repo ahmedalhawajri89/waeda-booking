@@ -7,15 +7,20 @@
     <meta name="description" content="وعدة: نظام حجز مواعيد للمنشآت الخدمية. رابط حجز، تقويم لفريقك، وتذكير على الواتساب يقلّل الغياب." />
     <title>وعدة</title>
     <meta name="theme-color" content="#fafaf9" />
-    <!-- Theme before first paint: light unless dark (or "like the device") was chosen. Without
-         this the page flashes light before Vue mounts and switches it. -->
+    <!-- Theme before first paint: light, except in the console (/app) when dark (or "like the
+         device") was chosen there. Without this the page flashes the wrong theme before Vue
+         mounts and switches it. -->
     <script>
       ;(function () {
         try {
+          // Dark is for the console only (useTheme.js): the public pages stay light.
+          var path = location.pathname
+          var inConsole = path === '/app' || path.indexOf('/app/') === 0
           var stored = localStorage.getItem('bookingpro:theme')
           var dark =
-            stored === 'dark' ||
-            (stored === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+            inConsole &&
+            (stored === 'dark' ||
+              (stored === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches))
           document.documentElement.dataset.theme = dark ? 'dark' : 'light'
         } catch (e) {
           document.documentElement.dataset.theme = 'light'

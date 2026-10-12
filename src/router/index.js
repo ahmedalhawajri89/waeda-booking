@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { setPublicOrg } from '@/data/api/client'
+import { setConsoleScope } from '@/composables/useTheme'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -170,6 +171,8 @@ router.beforeEach(async (to) => {
 })
 
 router.afterEach((to) => {
+  // The dark choice belongs to the console; every other page is light.
+  setConsoleScope(to.path === '/app' || to.path.startsWith('/app/'))
   const title = to.meta.title
   document.title = title ? `${title} · وعدة` : 'وعدة'
 })

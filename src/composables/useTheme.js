@@ -32,10 +32,28 @@ const resolved = computed(() =>
   choice.value === 'system' ? (deviceDark.value ? 'dark' : 'light') : choice.value,
 )
 
+/**
+ * Dark is the operator's choice for their workspace, not for the site: the
+ * landing page, a business's booking page and sign-in are always light. They
+ * have no switch of their own, and the dark choice used to follow the operator
+ * there with no way back. The router sets this on every navigation.
+ */
+const inConsole = ref(false)
+
+/** What the page actually shows: the choice inside /app, light everywhere else. */
+const effective = computed(() => (inConsole.value ? resolved.value : 'light'))
+
 function apply() {
-  document.documentElement.dataset.theme = resolved.value
+  document.documentElement.dataset.theme = effective.value
   // Charts and anything else that reads CSS variables once can listen for this.
-  window.dispatchEvent(new CustomEvent('themechange', { detail: resolved.value }))
+  window.dispatchEvent(new CustomEvent('themechange', { detail: effective.value }))
+}
+
+/** @param {boolean} on whether the current page is part of the console (/app) */
+export function setConsoleScope(on) {
+  if (inConsole.value === on) return
+  inConsole.value = on
+  apply()
 }
 
 /** @param {'light' | 'dark' | 'system'} next */
@@ -53,7 +71,8 @@ export function useTheme() {
   return {
     choice,
     resolved,
-    isDark: computed(() => resolved.value === 'dark'),
+    effective,
+    isDark: computed(() => effective.value === 'dark'),
     setTheme,
     toggle: () => setTheme(resolved.value === 'dark' ? 'light' : 'dark'),
   }

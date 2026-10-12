@@ -3,7 +3,7 @@ import { RouterView } from 'vue-router'
 import { Toaster } from 'vue-sonner'
 import { useTheme } from '@/composables/useTheme'
 
-const { resolved } = useTheme()
+const { effective } = useTheme()
 </script>
 
 <template>
@@ -13,6 +13,6 @@ const { resolved } = useTheme()
         <component :is="Component" />
       </Transition>
     </RouterView>
-    <Toaster position="top-center" rich-colors :theme="resolved" dir="rtl" />
+    <Toaster position="top-center" rich-colors :theme="effective" dir="rtl" />
   </div>
 </template>
