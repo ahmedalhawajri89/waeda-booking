@@ -735,7 +735,8 @@ await go('/', 'home-pricing', 800)
 {
   // Yearly is the default and shows the monthly equivalent; read the monthly prices.
   await page.locator('#pricing').getByRole('switch').click()
-  await page.waitForTimeout(300)
+  // Prices travel to their new value (0.5s): read them once they land.
+  await page.waitForTimeout(800)
   const text = await page.locator('#pricing').innerText()
   console.log(
     /99/.test(text) && /249/.test(text) && !/قريباً/.test(text)

@@ -4,6 +4,7 @@ import { Check, Minus, Plus } from 'lucide-vue-next'
 import { NUMBER_LOCALE } from '@/lib/format'
 import { planByKey, TRIAL_DAYS, TRIAL_PLAN } from '@/data/plans'
 import { useTween } from '@/composables/useTween'
+import { useOwnerNumbers } from '@/composables/useOwnerNumbers'
 
 /**
  * What no-shows cost, in the owner's own numbers — and shown, not only said.
@@ -18,10 +19,8 @@ import { useTween } from '@/composables/useTween'
  * question the visitor is actually asking. Honest either way: when it does
  * not cover the price, it says so and points to the free plan.
  */
-const perWeek = ref(60)
-const price = ref(150)
-const noShowRate = ref(12)
-const recovered = ref(40)
+// Shared with the pricing below, which uses them to say which plan fits.
+const { perWeek, price, noShowRate, recovered } = useOwnerNumbers()
 
 const WEEKS_PER_MONTH = 52 / 12
 
