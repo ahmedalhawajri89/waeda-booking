@@ -1,10 +1,11 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Check, Clock, Eye, EyeOff, Loader2, Lock, Mail, Search } from 'lucide-vue-next'
+import { ArrowLeft, Eye, EyeOff, Loader2, Lock, Mail, Search } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import AppLogo from '@/components/ui/AppLogo.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
+import LiveDay from '@/components/auth/LiveDay.vue'
 import { useAuthStore } from '@/stores/auth'
 import { isDemoBackend } from '@/data/repository'
 
@@ -75,12 +76,6 @@ function findBooking() {
   const ref = reference.value.trim().toUpperCase()
   if (ref) router.push(`/booking/${encodeURIComponent(ref)}`)
 }
-
-const DAY = [
-  { time: '9:00', name: 'منيرة', status: 'مؤكد', ok: true },
-  { time: '10:30', name: 'عبدالله', status: 'مؤكد', ok: true },
-  { time: '12:00', name: 'ريما', status: 'بانتظار الرد', ok: false },
-]
 </script>
 
 <template>
@@ -197,40 +192,10 @@ const DAY = [
       aria-hidden="true"
     >
       <div class="mx-auto w-full max-w-md">
-        <div class="border-border bg-surface elev-overlay rounded-[var(--radius-xl)] border p-5">
-          <div class="mb-4 flex items-center justify-between">
-            <div>
-              <p class="text-fg font-bold">مواعيد اليوم</p>
-              <p class="text-fg-subtle text-xs">قبل أن تفتح الباب</p>
-            </div>
-            <span class="bg-success-50 text-success-700 rounded-full px-2.5 py-1 text-xs font-bold"
-              >2 من 3 مؤكدة</span
-            >
-          </div>
-          <ul class="space-y-2">
-            <li
-              v-for="a in DAY"
-              :key="a.time"
-              class="border-border flex items-center justify-between rounded-[var(--radius-md)] border px-3 py-2.5"
-            >
-              <span class="flex items-center gap-3">
-                <span class="text-fg-subtle w-10 text-xs" dir="ltr" data-numeric>{{ a.time }}</span>
-                <span class="text-fg text-sm font-semibold">{{ a.name }}</span>
-              </span>
-              <span
-                class="flex items-center gap-1 text-xs font-semibold"
-                :class="a.ok ? 'text-success-700' : 'text-warning-700'"
-              >
-                <Check v-if="a.ok" class="h-3.5 w-3.5" />
-                <Clock v-else class="h-3.5 w-3.5" />
-                {{ a.status }}
-              </span>
-            </li>
-          </ul>
-        </div>
+        <LiveDay />
         <p class="font-display text-fg mt-8 text-xl leading-relaxed font-bold">
-          التذكير خرج، والعملاء أكّدوا.<br />
-          <span class="text-fg-muted font-medium">أنت تبدأ يومك وجدولك واضح.</span>
+          التذكير يخرج، والعملاء يؤكدون، والموعد الملغى يجد صاحبه.<br />
+          <span class="text-fg-muted font-medium">وأنت تبدأ يومك وجدولك واضح.</span>
         </p>
       </div>
     </aside>
