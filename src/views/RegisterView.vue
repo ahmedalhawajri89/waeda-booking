@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import {
   ArrowLeft,
   ArrowRight,
@@ -75,10 +75,24 @@ const strength = computed(() => {
 })
 const STRENGTH = ['ضعيفة', 'مقبولة', 'جيدة', 'قوية']
 
+// Empty and wrong are told apart: "write your email" and "write it like this"
+// are different things to fix.
 const accountErrors = computed(() => ({
-  fullName: account.fullName.trim().length < 2 ? 'اكتب اسمك' : undefined,
-  email: !/^\S+@\S+\.\S+$/.test(account.email) ? 'بريد إلكتروني غير صالح' : undefined,
-  password: account.password.length < 8 ? 'كلمة المرور 8 أحرف على الأقل' : undefined,
+  fullName: !account.fullName.trim()
+    ? 'اكتب اسمك'
+    : account.fullName.trim().length < 2
+      ? 'الاسم قصير جداً'
+      : undefined,
+  email: !account.email.trim()
+    ? 'اكتب بريدك الإلكتروني'
+    : !/^\S+@\S+\.\S+$/.test(account.email)
+      ? 'اكتب البريد بهذا الشكل: name@example.com'
+      : undefined,
+  password: !account.password
+    ? 'اختر كلمة مرور'
+    : account.password.length < 8
+      ? 'كلمة المرور 8 أحرف على الأقل'
+      : undefined,
 }))
 
 /* -------------------------------------------------------- 2 · business */
@@ -189,9 +203,21 @@ const errorsOf = (s) => [accountErrors, bizErrors, pageErrors][s - 1].value
 const stepValid = (s) =>
   !Object.values(errorsOf(s)).some(Boolean) && (s !== 2 || slugState.value === 'available')
 
+/**
+ * After a refused step, focus goes to the first field that says why — so the
+ * message is in view and a screen reader reads it — instead of the browser's
+ * own English bubble, which `novalidate` turns off.
+ */
+async function showFirstError() {
+  await nextTick()
+  const field = document.querySelector('main [aria-invalid="true"]')
+  field?.focus({ preventScroll: true })
+  field?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
 function next() {
   touched.value = true
-  if (!stepValid(step.value)) return
+  if (!stepValid(step.value)) return showFirstError()
   touched.value = false
   step.value++
   window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -204,7 +230,7 @@ const err = (key) => (touched.value ? errorsOf(step.value)[key] : undefined)
 
 async function create() {
   touched.value = true
-  if (!stepValid(3)) return
+  if (!stepValid(3)) return showFirstError()
   submitting.value = true
   try {
     await auth.signUpBusiness({
@@ -397,7 +423,7 @@ const price = (p) => (Number(p) > 0 ? `${Number(p)} ر.س` : 'مجاناً')
             افتح منشأتك على وعدة
           </h1>
           <p class="text-fg-muted mb-8">مجاناً، ولا يحتاج بطاقة ائتمان. ثلاث خطوات وصفحتك جاهزة.</p>
-          <form class="max-w-md space-y-4" @submit.prevent="next">
+          <form class="max-w-md space-y-4" novalidate @submit.prevent="next">
             <BaseInput
               v-model="account.fullName"
               label="اسمك"
@@ -471,7 +497,7 @@ const price = (p) => (Number(p) > 0 ? `${Number(p)} ر.س` : 'مجاناً')
             عرّفنا على منشأتك
           </h1>
           <p class="text-fg-muted mb-8">يظهر هذا لعملائك أعلى صفحة الحجز.</p>
-          <form class="space-y-6" @submit.prevent="next">
+          <form class="space-y-6" novalidate @submit.prevent="next">
             <BaseInput
               v-model="biz.name"
               class="max-w-md"
@@ -542,6 +568,7 @@ const price = (p) => (Number(p) > 0 ? `${Number(p)} ر.س` : 'مجاناً')
                   autocomplete="off"
                   spellcheck="false"
                   aria-describedby="slug-state"
+                  :aria-invalid="err('slug') ? true : undefined"
                   @input="onSlugInput"
                 />
                 <span class="px-3" aria-hidden="true">
@@ -683,7 +710,7 @@ const price = (p) => (Number(p) > 0 ? `${Number(p)} ر.س` : 'مجاناً')
                 </button>
               </span>
             </div>
-            <form class="flex max-w-md gap-2" @submit.prevent="addStaff">
+            <form class="flex max-w-md gap-2" novalidate @submit.prevent="addStaff">
               <input
                 v-model="newStaff"
                 class="border-border bg-surface text-fg focus:border-fg min-w-0 flex-1 rounded-[var(--radius-md)] border px-3 py-2.5 text-sm"

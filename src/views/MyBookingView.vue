@@ -153,7 +153,13 @@ const askingCode = ref(false)
 const codeError = ref(false)
 const codeBox = ref(null)
 
+/** Nothing typed: said under the field, rather than sent and refused. */
+const phoneMissing = ref(false)
+watch(phone, () => (phoneMissing.value = false))
+
 async function verify(entered = phone.value, quiet = false) {
+  phoneMissing.value = !quiet && !digitsOnly(entered)
+  if (phoneMissing.value) return
   attempted.value = !quiet
   checking.value = true
   try {
@@ -466,7 +472,7 @@ function moveInstead() {
             </button>
           </div>
         </div>
-        <form v-else class="space-y-4" @submit.prevent="verify()">
+        <form v-else class="space-y-4" novalidate @submit.prevent="verify()">
           <BaseInput
             v-model="phone"
             label="رقم الجوال"
@@ -478,9 +484,11 @@ function moveInstead() {
             required
             placeholder="05XXXXXXXX"
             :error="
-              attempted && !verified && !checking && !askingCode
-                ? 'الرقم لا يطابق هذا الحجز'
-                : undefined
+              phoneMissing
+                ? 'اكتب رقم جوالك أولاً'
+                : attempted && !verified && !checking && !askingCode
+                  ? 'الرقم لا يطابق هذا الحجز'
+                  : undefined
             "
           />
           <button
