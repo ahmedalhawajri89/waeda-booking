@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { addDays, addMinutes, differenceInMinutes, startOfDay } from 'date-fns'
+import { addDays, addMinutes, differenceInMinutes, isSameDay, startOfDay } from 'date-fns'
 import { useBookingsStore } from '@/stores/bookings'
 import { schedule } from '@/data/catalog'
 import { sameBusinessDay, windowFor } from '@/lib/hours'

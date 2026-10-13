@@ -248,6 +248,14 @@ console.log(
 // --- other operator screens --------------------------------------------
 await go('/app', 'app-today-full', 1200)
 await go('/app/calendar', 'app-calendar', 1000)
+
+// the week view: seven day columns. It once rendered blank on a missing import
+// that nothing here opened, so open it and count the days.
+await go('/app/calendar?view=week', 'app-calendar-week', 1000)
+{
+  const days = await page.locator('main').getByText(/^(السبت|الأحد|الاثنين|الثلاثاء|الأربعاء|الخميس|الجمعة|سبت|أحد|اثنين|ثلاثاء|أربعاء|خميس|جمعة)$/).count()
+  console.log(days >= 7 ? `✓ week view shows its days (${days})` : `✗ week view is blank (${days} day headings)`)
+}
 await go('/app/customers', 'app-customers', 900)
 await go('/app/settings', 'app-settings', 800)
 
